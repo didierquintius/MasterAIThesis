@@ -4,6 +4,7 @@ Created on Sun Aug  9 09:50:32 2020
 
 % Code by Guido Nolte with minor modifications by Stefan Haufe
 """
+
 import numpy as np
 
 def eloreta(LL, gamma):
