@@ -5,14 +5,37 @@ Created on Sat Sep 26 11:18:36 2020
 @author: didie
 """
 import pickle, os
+import random
 import pandas as pd
 import numpy as np
 import plotly.offline as pyo
 import plotly.graph_objs as go
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 #%%
-location_neurons = pickle.load(open("../Data/location_neurons.pkl", "rb"))
-location_neurons = location_neurons[range(0, location_neurons.shape[0], 744),:]
+location_neurons = pickle.load(open("../../Data/location_neurons.pkl", "rb"))
+location_neurons = location_neurons[range(0, location_neurons.shape[0], 250),:]
+#%%
+neurons= np.arange(location_neurons.shape[0]).tolist()
+active = random.sample(neurons, 3)
+for neuron in active: neurons.remove(neuron)
+#%%
+noisy = random.sample(neurons, 150)
+for i in noisy: neurons.remove(i)
+idle = neurons
+#%%
+indexes = {"active": active, "noisy": noisy, "idle": idle}
+color = {"active": "red", "noisy": "pink", "idle": "grey"}
+opacity = {"active": 1, "noisy": 0.6, "idle": 0.3}
+#%%
+pyo.plot([go.Scatter3d(x = location_neurons[indexes[part],0],
+                      y = location_neurons[indexes[part],1],
+                      z = location_neurons[indexes[part],2],
+                      name = part,
+                      mode = 'markers',
+                      marker= dict(size = 5, color = color[part],
+                                   opacity = opacity[part]),
+                      ) for part in indexes.keys()])
+
 #%%
 parts = 100
 
