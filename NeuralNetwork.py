@@ -84,7 +84,10 @@ def NeuralNet(input_size, neurons,output):
     
     return NeuralNets[str(amount_of_layers)](input_size, neurons, output)
 #%%
-class CNN(nn.Module):
+def output_size(input_size, kernel_size, stride):
+    return int((input_size - kernel_size + stride) / stride)
+    
+class CNN(nn.Module):  
     
     def __init__(self, input_size, layers, kernel_sizes, stride):
         super().__init__()
@@ -96,6 +99,7 @@ class CNN(nn.Module):
         self.fc2 = nn.Linear(layers[2], 1)
         
     def forward(self, x):
+        x = x.detach()
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(-1, self.cnn_output)
@@ -103,5 +107,4 @@ class CNN(nn.Module):
         x = self.fc2(x)
         return x
         
-def output_size(input_size, kernel_size, stride):
-    return int((input_size - kernel_size + stride) / stride)
+

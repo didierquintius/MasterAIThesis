@@ -12,6 +12,23 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 #%%
+def plot_line(traces):
+    fig = [] 
+    for trace in traces:
+        x = np.arange(trace.shape[0])
+        fig += [go.Scatter(x = x, y = trace, mode = "lines")]
+    pyo.plot(fig)
+    
+def plot_accuracy(NeuralNets, X, y, n_neurons_to_plot = 3):
+    neurons = len(NeuralNets)
+    neurons_to_plot = random.sample(range(neurons),n_neurons_to_plot)
+    for neuron in neurons_to_plot:
+        pred = NeuralNets[neuron](X[str(neuron)]["test"])
+        plot_line([pred.detach().transpose(0,1)[0], y[str(neuron)]["test"].transpose(0,1)[0]])
+        
+    
+    
+#%%
 location_neurons = pickle.load(open("../../Data/location_neurons.pkl", "rb"))
 location_neurons = location_neurons[range(0, location_neurons.shape[0], 250),:]
 #%%

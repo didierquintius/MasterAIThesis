@@ -5,9 +5,10 @@ Created on Fri May 29 17:36:54 2020
 @author: didie
 """
 
-import pickle, random
+import pickle, random, os
 import numpy as np
-
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir("..")
 #%%
 def generate(seed, time_steps, trials, no_active_sources = 3):
     # generates activitactivity for n sources for a given number of timesteps and trials

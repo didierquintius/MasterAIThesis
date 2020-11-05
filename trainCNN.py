@@ -10,16 +10,16 @@ from NeuralNetwork import CNN
 import torch
 
 
-Net = CNN(100, [20, 40, 10], [10, 3], [5,1])
+Net = CNN(50, [20, 40, 10], [3, 3], [2,1])
 optimizer = optim.Adam(Net.parameters(), lr =  1e-4)
 loss_function = nn.MSELoss()
 val_counter = 0
 #%%
-for epoch in range(10):                
-    for i in range(0, 800, 10):
+for epoch in range(2):                
+    for i in range(0, 10000, 10):
         Net.zero_grad()
-        outputs = Net(torch.Tensor(X[i:(i + 10),:]).view(-1, 1, 100))
-        loss = loss_function(outputs, torch.Tensor(y[i:(i +10), :]))
+        outputs = Net(torch.Tensor(predictions[i:(i + 10),:]).view(-1, 1, 50))
+        loss = loss_function(outputs, torch.Tensor(source_matrix[i:(i + 10), 0]))
         loss.backward()
         optimizer.step()
         

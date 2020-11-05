@@ -13,7 +13,7 @@ from forward_problem import EEG_signal
 def loadAndSplitMulti(snr, cnr, noise_sources, no_brain_areas, train_perc = 0.7,
                       val_perc = 0.1, time_steps = 100, trials = 10000):
     
-    data_file = "../Data/EEG/data_" + str(snr) + "_" + str(cnr) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl"
+    data_file = "../../Data/EEG/data_" + str(snr) + "_" + str(cnr) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl"
     
     if os.path.exists(data_file):            
         EEG_data, sources, activity = pickle.load(open(data_file, "rb"))
