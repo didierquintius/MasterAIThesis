@@ -52,16 +52,14 @@ def updateNet(Net, X, y, loss_function, optimizer):
     optimizer.step()
     return loss
 
-epochs = 2
+
 no_blocks = np.round(trials / 3 - 1)
 chunk_size = 100
-losses = []
+
 for brainarea in range(1):
     predictions = NeuralNets[brainarea](EEG_data).view((trials, timesteps))
-
     active = np.where(source_matrix[:, brainarea] == 1)[0].tolist()
     idle   = np.where(source_matrix[:, brainarea] == 0)[0].tolist()
-    
     block_size = int(len(idle)/ no_blocks)   
     for epoch in range(epochs):
         for block in tqdm(range(no_blocks)):
