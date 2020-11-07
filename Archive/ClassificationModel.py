@@ -25,8 +25,6 @@ def import_data(snr, cnr, noisy, neurons):
     
     return NeuralNets, EEG_data, sources
 
-def chunks(listi, n):
-    return [listi[i:(i + n)] for i in range(0, len(listi), n)]
 #%%
 NeuralNets, EEG_data, sources = import_data(0.9, 0.9, 5, 10)
 electrodes, timesteps, trials = EEG_data.shape

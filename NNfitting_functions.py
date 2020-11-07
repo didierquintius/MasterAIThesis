@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-from NeuralNetwork import NeuralNet, CNN
+from NeuralNetwork_functions import NeuralNet, CNN
 
 def calc_loss(Net, X, y, loss_function):
     with torch.no_grad():
@@ -79,56 +79,78 @@ def createAndSplitData(EEG_data, source_matrix, timesteps, NeuralNets,
                        brainarea, train_perc = 0.7, val_perc = 0.1):
     
     predictions = NeuralNets[brainarea](EEG_data).view((-1, timesteps))
-    active = np.where(source_matrix[:, brainarea] == 1)[0]
-    idle   = np.where(source_matrix[:, brainarea] == 0)[0]
-    percs = {"train":(0, train_perc),"val":(train_perc, val_perc),"test": (val_perc, 1)}
-    activity = {"active": active, "idle": idle}
+
+
     data_dict = {"X":{},"y":{}}
     original = {"X": predictions, "y": source_matrix[:, brainarea]}
+    trials = np.arange(predictions.shape[0]).tolist()
     for data_name, data in data_dict.items():
-        for section, perc in percs.items():
-            for state_name, state in activity.items():
-                data[section] = {}
-                index = np.arange(int(perc[0] * state.shape[0]),int(perc[1] * state.shape[0]))
-                if data_name == "y": data[section][state_name] = original[data_name][state][index]
-                else: data[section][state_name] = original[data_name][state,:][index]
+        random.seed(0)
+        train = random.sample(trials, int(train_perc * len(trials)),)
+        remaining_trials = list(set(trials) -set(train))
+        val = random.sample(remaining_trials, int(val_perc * len(trials)),)
+        test = list(set(trials) - set(val))
+        sections = {"train": train, "val":val,"test":test}
+        for section, index in sections.items():
+            if data_name == "y": data[section] = original[data_name][index]
+            else: data[section] = original[data_name][index,:].view(-1, 1, timesteps)
+    X_train = {}            
+    X_train["active"] = data_dict["X"]["train"][data_dict["y"]["train"] == 1,:,:]
+    X_train["idle"]   = data_dict["X"]["train"][data_dict["y"]["train"] == 0,:,:]
+    
+    y_train = {}            
+    y_train["active"] = data_dict["y"]["train"][data_dict["y"]["train"] == 1]
+    y_train["idle"]   = data_dict["y"]["train"][data_dict["y"]["train"] == 0]
             
-    X, y  = data_dict.values()
+    X , y  = data_dict.values()
+    X["train"] = X_train
+    y["train"] = y_train
+    y["val"] = y["val"].view(-1,1)
+    
     no_blocks = int(source_matrix.shape[0] / 3 - 1)
-    blocks = createChunks(np.arange(len(idle)), no_blocks)
-    return X, y, blocks, activity
+    blocks = createChunks(np.arange(X["train"]["idle"].shape[0]), no_blocks)
+    return X, y, blocks
 #%%
 def fitBalancedNeuralNet(Net, NeuralNets, EEG_data, source_matrix, brain_area, timesteps,
                          learning_rate, EPOCHS, chunk_size, max_val_amount, val_freq):
     optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
     loss_function = nn.MSELoss()
-    X, y, blocks, activity =  createAndSplitData(EEG_data, source_matrix, timesteps,
+    X, y, blocks =  createAndSplitData(EEG_data, source_matrix, timesteps,
                                                  NeuralNets, brain_area)
     Validation = ValidationChecker(max_val_amount, loss_function, X, y)
     for epoch in range(EPOCHS):
         for block in tqdm(blocks):
-            indexes = np.append(activity["active"], activity["idle"][block])
-            random.shuffle(indexes)
-            block_X = X["train"][indexes, :]
-            block_y = y["train"][indexes]
+            block_X = torch.cat((X["train"]["active"], X["train"]["idle"][block,:]), 0)
+            block_y = torch.cat((y["train"]["active"], y["train"]["idle"][block]), 0)
             chunks = createChunks(np.arange(block_y.shape[0]), chunk_size)
                
             for i, chunk in enumerate(chunks):
-                chunk_X = block_X[chunk, :].view(-1, 1, block_X.shape[1])
-                chunk_y = torch.Tensor(block_y[chunk].view(-1,1))
+                chunk_X = block_X[chunk, :]
+                chunk_y = torch.Tensor(block_y[chunk].view(-1, 1))
                 
                 updateNet(Net, chunk_X, chunk_y, loss_function, optimizer)
                 
                 if (i % val_freq) == 0: 
                     Net, STOP = Validation.check(Net)                
-                    if STOP: result_dict(Net, X, y, Validation.val_losses, loss_function)
+                    if STOP: 
+                            result = {"Net": Net,
+                              "validation_losses": Validation.val_losses,
+                              "test_performance": np.float(loss_function(Net(X["test"]), y["test"])),
+                              "val_performance": np.float(loss_function(Net(X["val"]), y["val"]))}
+                                            
+    result = {"Net": Net,
+      "validation_losses": Validation.val_losses,
+      "test_performance": np.float(loss_function(Net(X["test"]), y["test"].view(-1, 1))),
+      "val_performance": Validation.val_losses[-1]}
 
-    return result_dict(Net, X, y, Validation.val_losses, loss_function)
+    return result
 #%%
-def fit_NeuralNets(X, y, no_brain_areas, architecture = [20], learning_rate = 5e-4, EPOCHS = 20, chunk = 50,
+def fit_NeuralNets(X, y, architecture = [20], learning_rate = 5e-4, EPOCHS = 20, chunk = 50,
                    max_val_amount = 40, val_freq = 5):
     NeuralNets = {}
-    for brain_area in range(no_brain_areas):
+    brain_areas = len(X)
+    
+    for brain_area in range(brain_areas):
         Net = NeuralNet(X[str(brain_area)]["train"].shape[1], architecture,
                         output = y[str(brain_area)]["train"].shape[1])
         
