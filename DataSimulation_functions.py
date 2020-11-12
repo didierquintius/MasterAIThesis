@@ -8,7 +8,6 @@ Created on Fri May 29 17:36:54 2020
 import pickle, random, os
 import numpy as np
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-os.chdir("..")
 #%%
 def generate(seed, time_steps, trials, no_active_sources = 3):
     # generates activitactivity for n sources for a given number of timesteps and trials
@@ -55,7 +54,7 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
                 noise_sources, seed = 0, only_save = False):
     
     # load projection matrix and subset to the relevant brain areas
-    projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
+    projection_matrix = pickle.load(open( "../../Data/projection_matrix.pkl", "rb" ))
     projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
                                                    int(np.ceil(projection_matrix.shape[1]/no_brain_areas)))]
 
@@ -90,9 +89,15 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
         
         EEG_Data[:,:,trial] = channel_noise_ratio * EEG_signal + (1 - channel_noise_ratio) * EEG_channel_noise
         activity[:,:,trial] = activity_trial
-        
+    
+    active_brain_areas = np.array(active_brain_areas)
+    shuffled_indexes = np.arange(trials).tolist()
+    random.shuffle(shuffled_indexes)
+    EEG_Data = EEG_Data[:,:,shuffled_indexes]
+    activity = activity[:,:,shuffled_indexes]
+    active_brain_areas = active_brain_areas[shuffled_indexes, :]
     data = (EEG_Data, active_brain_areas, activity)
-    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
+    pickle.dump(data, open( "../../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
     
     if not only_save:
         return data

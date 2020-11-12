@@ -4,6 +4,7 @@ Created on Thu Aug  6 11:35:20 2020
 
 @author: didie
 """
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -17,7 +18,7 @@ class NeuralNet1(nn.Module):
     
     def forward(self,x):
         x = F.relu(self.fc1(x))
-        x = self.out(x)
+        x = torch.tanh(self.out(x))
         
         return x
     
@@ -33,8 +34,7 @@ class NeuralNet2(nn.Module):
     def forward(self,x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.out(x)
-        
+        x = torch.tanh(self.out(x))        
         return x
 
 class NeuralNet3(nn.Module):
@@ -51,7 +51,7 @@ class NeuralNet3(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
-        x = self.out(x)
+        x = torch.tanh(self.out(x))
         
         return x
     
@@ -71,7 +71,7 @@ class NeuralNet4(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         x = F.relu(self.fc4(x))
-        x = self.out(x)
+        x = torch.tanh(self.out(x))
         
         return x
 
@@ -104,7 +104,7 @@ class CNN(nn.Module):
         x = F.relu(self.conv2(x))
         x = x.view(-1, self.cnn_output)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = torch.sigmoid(self.fc2(x))
         return x
         
 
