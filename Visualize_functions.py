@@ -4,18 +4,16 @@ Created on Sat Sep 26 11:18:36 2020
 
 @author: didie
 """
-import pickle, os
 import random
-import pandas as pd
 import numpy as np
 import plotly.offline as pyo
 import plotly.graph_objs as go
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 #%%
 def plot_line(traces):
     fig = [] 
     for trace in traces:
-        x = np.arange(trace.shape[0])
+        x = np.arange(len(trace))
         fig += [go.Scatter(x = x, y = trace, mode = "lines")]
     pyo.plot(fig)
     

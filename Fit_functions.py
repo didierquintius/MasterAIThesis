@@ -30,8 +30,8 @@ class Validation():
         self.min_val = np.inf
         self.min_Net = None
         self.val_losses = []
-        self.X_val = X["val"]
-        self.y_val = y["val"]
+        self.X_val = X
+        self.y_val = y
         
     def update(self, Net):
         
@@ -45,7 +45,7 @@ class Validation():
             self.min_val = self.val_losses[-1]
             self.val_counter = 0
         
-        return Net, None
+        return Net, ""
     
     def reset(self):
         self.val_counter = 0
@@ -65,10 +65,11 @@ def updateNet(Net, X, y, batch, loss_function, optimizer):
     optimizer.step()
     return loss
 
-def fitProjectionModel(EEG, sources, activity, no_brain_areas, architecture = [20], learning_rate = 5e-4, EPOCHS = 20,
+def fitProjectionModel(EEG, sources, activity, brain_area, architecture = [20], learning_rate = 5e-4, EPOCHS = 20,
                        batch_size = 50, max_val_amount = 40, val_freq = 5):
     
-    X_train, y_train, X_val, y_val = prepareProjectionData(EEG, sources, activity, no_brain_areas)
+    X_train, y_train, X_val, y_val = prepareProjectionData(EEG, sources, activity, brain_area)
+
     measurements , electrodes = X_train.shape
     
     Net = NeuralNet(electrodes, architecture, 1)
@@ -79,17 +80,17 @@ def fitProjectionModel(EEG, sources, activity, no_brain_areas, architecture = [2
     batches = createBatches(np.arange(measurements), batch_size)
     
     for epoch in range(EPOCHS):
-        for i, batch in enumerate(batches):            
+        for i, batch in enumerate(batches):      
             updateNet(Net, X_train, y_train, batch, loss_function, optimizer)
             
             if (i % val_freq) == 0: 
                 Net, STOP = Validator.update(Net)                
-                if STOP != None: 
-                    train_performance = loss_function(Net(X_train), y_train)
+                if STOP != "": 
+                    train_performance = np.float(loss_function(Net(X_train), y_train))
                     return Net, train_performance, Validator.val_losses, STOP
                 
-    train_performance = loss_function(Net(X_train), y_train)              
-    return Net, train_performance, Validator.val_losses, STOP   
+    train_performance = np.float(loss_function(Net(X_train), y_train))              
+    return Net, train_performance, Validator.val_losses, "Max Epochs" 
 
 def fitProjectionModels(EEG, sources, activity, no_brain_areas, architecture = [20], learning_rate = 5e-4, EPOCHS = 20,
                        batch_size = 50, max_val_amount = 40, val_freq = 5):
@@ -99,13 +100,48 @@ def fitProjectionModels(EEG, sources, activity, no_brain_areas, architecture = [
     STOPs = [] 
     
     for brain_area in range(no_brain_areas):
-        NeuralNets[brain_area], train_performance, val_losses[brain_area], STOP = (EEG, sources, activity, no_brain_areas, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq)
-        train_performances += train_performance
-        STOPs += STOP
+        NeuralNets[brain_area], train_performance, val_losses[brain_area], STOP = fitProjectionModel(EEG, sources, activity, brain_area, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq)
+        train_performances += [train_performance]
+        STOPs += [STOP]
+
+    train_performance = np.array(train_performances)
+    mean_train = train_performance.mean()
+    std_train = train_performance.std()
+    return NeuralNets, mean_train, std_train, val_losses, STOPs
+                           
+def fitClassificationModel(X, y, nodes = [10, 15], kernel_sizes = [5], strides = [3],
+                          learning_rate = 5e-4, EPOCHS = 100, batch_size = 50,
+                          max_val_amount = 400, val_freq = 10):
     
-    return NeuralNets, train_performances, val_losses, STOPs
+    time_steps = X["val"].shape[2]
+    idle_trials = X["train"]["idle"].shape[0]
+    active_trials = X["train"]["active"].shape[0]
+    
+    Net = CNN(time_steps, nodes, kernel_sizes, strides)
+    optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
+    loss_function = nn.BCELoss()
+    
+    Validator = Validation(max_val_amount, loss_function, X["val"], y["val"])
+    balanced_idle_indexes = createBatches(np.arange(idle_trials), active_trials)
+    for epoch in range(EPOCHS):
+        for balanced_idle_index in balanced_idle_indexes:
+            X_balanced = torch.cat((X["train"]["active"], X["train"]["idle"][balanced_idle_index,:,:]))
+            y_balanced = torch.cat((y["train"]["active"], y["train"]["idle"][balanced_idle_index,:]))
+            shuffled_indexes = np.arange(X_balanced.shape[0])
+            random.shuffle(shuffled_indexes)
+            X_balanced = X_balanced[shuffled_indexes,:,:]
+            y_balanced = y_balanced[shuffled_indexes,:]
             
-        
+            batches = createBatches(np.arange(len(balanced_idle_index)), batch_size)
+            for i, batch in enumerate(batches):
+                updateNet(Net, X_balanced, y_balanced, batch, loss_function, optimizer)
                 
-#def fitClassificationModel():
+                if (i % val_freq) == 0: 
+                    Net, STOP = Validator.update(Net)                
+                    if STOP != "": 
+                        train_performance = np.float(loss_function(Net(X_balanced), y_balanced))
+                        return Net, train_performance, Validator.val_losses, STOP
+                    
+    train_performance = np.float(loss_function(Net(X_balanced), y_balanced))              
+    return Net, train_performance, Validator.val_losses, "Max Epochs"                 
     

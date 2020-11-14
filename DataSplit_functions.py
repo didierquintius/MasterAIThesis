@@ -80,7 +80,9 @@ def prepareProjectionData(EEG_data, sources, activity, brain_area, train_perc = 
         data = np.sum(data * np.array(relevant_data_indexes).T, axis = 1)
         data = setNNFormat(data, 1)
         return data
-        
+    
+    
+    
     elecs = EEG_data.shape[0]
     # find the trials where the brain area was active
     relevant_trials = np.where([brain_area in source for source in sources.tolist()])[0]
@@ -92,7 +94,7 @@ def prepareProjectionData(EEG_data, sources, activity, brain_area, train_perc = 
     EEG_val = setNNFormat(EEG_data[:, :, relevant_trials[train_ind:]], elecs)
     
     activity_train  = filterActivityData(activity, relevant_trials[:train_ind])  
-    activity_val  = filterActivityData(activity, relevant_trials[:train_ind])
+    activity_val  = filterActivityData(activity, relevant_trials[train_ind:])
         
     return EEG_train, activity_train, EEG_val, activity_val
     
@@ -126,8 +128,8 @@ def prepareClassificationData(EEG_data, sources, brain_areas, NeuralNets, train_
     
     X["val"]= activity_prediction[val_indexes,:]
     X["train"] = {}
-    X["train"]["active"] = activity_prediction[active_time_series[val_ind:],:]
-    X["train"]["idle"] = activity_prediction[idle_time_series[val_ind:],:]
+    X["train"]["active"] = activity_prediction[active_time_series[val_ind:],:,:]
+    X["train"]["idle"] = activity_prediction[idle_time_series[val_ind:],:,:]
     
     y["val"] = brain_area_activity[val_indexes,:]
     y["train"] = {}
