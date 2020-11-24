@@ -49,7 +49,7 @@ def splitData(EEG_data, sources, activity, brain_areas, train_perc = 0.7,
       
     return XandY["X"], XandY["y"]
 
-def splitTestData(EEG_data, sources, activity, test_perc = 0.2):
+def splitTestData(EEG_data, sources, noisy_sources, activity, test_perc = 0.2):
     electrodes, timesteps, trials = EEG_data.shape
     
     # calculate number of trials in the test data
@@ -58,44 +58,61 @@ def splitTestData(EEG_data, sources, activity, test_perc = 0.2):
     EEG_data_test = EEG_data[:,:,:test_ind]
     activity_test = activity[:,:,:test_ind]
     sources_test = sources[:test_ind,:]
+    noisy_sources_test = sources[:test_ind,:]
     
     EEG_data_trainval = EEG_data[:,:,test_ind:]
     activity_trainval = activity[:,:,test_ind:]
     sources_trainval = sources[test_ind:,:]
+    noisy_sources_trainval = sources[test_ind:,:]
     
-    return EEG_data_test,  sources_test,activity_test, EEG_data_trainval,  sources_trainval, activity_trainval
+    return EEG_data_test,  sources_test, noisy_sources_test, activity_test, EEG_data_trainval,  sources_trainval, noisy_sources_trainval, activity_trainval
 
 def setNNFormat(data, nn_input):
         data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
         return data
     
-def prepareProjectionData(EEG_data, sources, activity, brain_area, train_perc = 0.7, val_perc = 0.1):
-
-    
+def prepareProjectionData(EEG_data, sources, noisy_sources, activity, brain_area, train_perc = 0.7, val_perc = 0.1):
+  
     def filterActivityData(data, relevant_trials, sources = sources, brain_area = brain_area):
         data = data[:, :, relevant_trials]
         relevant_sources = sources[relevant_trials].tolist()
         relevant_data_indexes = [[neuron == brain_area for neuron in source] for source in relevant_sources]
         data = data.swapaxes(1,0)
         data = np.sum(data * np.array(relevant_data_indexes).T, axis = 1)
-        data = setNNFormat(data, 1)
         return data
+    random.seed(0)
+    elecs, time_steps , trials = EEG_data.shape
     
-    
-    
-    elecs = EEG_data.shape[0]
     # find the trials where the brain area was active
-    relevant_trials = np.where([brain_area in source for source in sources.tolist()])[0]
-    
+    active_trials = np.where([brain_area in source for source in sources.tolist()])[0]
+    noisy_trials = np.where([brain_area in source for source in noisy_sources.tolist()])[0]
+    silent_trials = np.delete(np.arange(trials), np.append(noisy_trials, active_trials))
+
     # calculate the amount of trails in the train data
-    train_ind = int(train_perc /(train_perc + val_perc ) * len(relevant_trials))
+    val_ind = int(val_perc /(train_perc + val_perc ) * len(active_trials))
     
-    EEG_train = setNNFormat(EEG_data[:, :, relevant_trials[:train_ind]], elecs)
-    EEG_val = setNNFormat(EEG_data[:, :, relevant_trials[train_ind:]], elecs)
+    val_order = np.arange(val_ind)
+    random.shuffle(val_order)
     
-    activity_train  = filterActivityData(activity, relevant_trials[:train_ind])  
-    activity_val  = filterActivityData(activity, relevant_trials[train_ind:])
-        
+    val_indexes = np.append(active_trials[:val_ind], silent_trials[:val_ind])
+    val_indexes = val_indexes[val_order]
+    
+    EEG_train = {}
+    EEG_train['active'] = setNNFormat(EEG_data[:, :, active_trials[val_ind:]], elecs)
+    EEG_train['silent'] = setNNFormat(EEG_data[:, :, silent_trials[val_ind:]], elecs)
+    
+    EEG_val   = setNNFormat(EEG_data[:, :, val_indexes], elecs)
+    
+    activity_train = {}
+    activity_train['active'] = setNNFormat(filterActivityData(activity, active_trials[val_ind:]), 1)
+    activity_train['silent'] = setNNFormat(np.zeros((1, time_steps, len(silent_trials) - val_ind)), 1)
+    
+    active_activity_val  = filterActivityData(activity, active_trials[:val_ind])
+    silent_activity_val = np.zeros((1, time_steps, val_ind))
+    activity_val = np.append(active_activity_val, silent_activity_val, 2)
+    activity_val = activity_val[:,:, val_order]
+    activity_val = setNNFormat(activity_val, 1)
+    
     return EEG_train, activity_train, EEG_val, activity_val
     
 def prepareClassificationData(EEG_data, sources, brain_areas, NeuralNets, train_perc = 0.7, val_perc = 0.1):

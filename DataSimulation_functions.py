@@ -54,13 +54,14 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
                 noise_sources, seed = 0, only_save = False):
     
     # load projection matrix and subset to the relevant brain areas
-    projection_matrix = pickle.load(open( "../../Data/projection_matrix.pkl", "rb" ))
+    projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
     projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
                                                    int(np.ceil(projection_matrix.shape[1]/no_brain_areas)))]
 
     # determine which brain areas will be active during each trial
     sample_list = np.arange(no_brain_areas).tolist()
     active_brain_areas = []
+    noisy_brain_areas = []
     # each brain area is active part 1 equal amount of times
     # the other two active no_brain_areas are chosen randomly
     for neuron in range(no_brain_areas):
@@ -77,6 +78,7 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
         noisy_activity = noisy_activity / np.linalg.norm(noisy_activity, ord = 'fro')
         activity_trial = activity[:,:,trial] / np.abs(activity[:,:,trial]).max()
         noisy_elements = np.random.choice(no_brain_areas, noise_sources, replace = False)
+        noisy_brain_areas +=  [noisy_elements]
         
         EEG_activity = projection_matrix[:, active_brain_areas[trial]] @ activity_trial
         EEG_noisy = projection_matrix[:, noisy_elements] @ noisy_activity
@@ -91,13 +93,15 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
         activity[:,:,trial] = activity_trial
     
     active_brain_areas = np.array(active_brain_areas)
+    noisy_brain_areas = np.array(noisy_brain_areas)
     shuffled_indexes = np.arange(trials).tolist()
     random.shuffle(shuffled_indexes)
     EEG_Data = EEG_Data[:,:,shuffled_indexes]
     activity = activity[:,:,shuffled_indexes]
     active_brain_areas = active_brain_areas[shuffled_indexes, :]
-    data = (EEG_Data, active_brain_areas, activity)
-    pickle.dump(data, open( "../../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
+    noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
+    data = (EEG_Data, active_brain_areas, noisy_brain_areas, activity)
+    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
     
     if not only_save:
         return data

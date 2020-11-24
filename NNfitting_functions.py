@@ -12,6 +12,7 @@ import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+#%%
 from NeuralNetwork_functions import NeuralNet, CNN
 
 def calc_loss(Net, X, y, loss_function):

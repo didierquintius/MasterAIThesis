@@ -4,14 +4,14 @@ Created on Sat Nov 14 15:44:19 2020
 
 @author: didie
 """
-time_steps = [10, 20, 50, 100, 200]
-trials = [100, 500, 1000]
-pred_archs = [[10], [20], [30], [50], [10, 5], [20, 5],[30, 5]]
-node_CNN = [2, 5, 10]
-node_Dense = [5, 10, 15]
-kernel_size = [[3], [10]]
-strides = [[2],[3]]
-learning_rate = [1e-4, 1e-3]
+time_steps = [50]
+trials = [500]
+pred_archs = [[10]]
+node_CNN = [2]
+node_Dense = [5]
+kernel_size = [[3]]
+strides = [[2]]
+learning_rate = [1e-3]
 from Runv2 import runModel
 from tqdm import tqdm
 import pandas as pd
@@ -26,7 +26,7 @@ for i in tqdm(range(longest)):
     time_step, trial  = time_step_trials[i % len_data]
     pred_arch = pred_archs[i % len_pred]
     nodes, kernel, stride, lr = clas_archs[i % len_clas]
-    output = runModel(0.9, 0.9, 50, 100, time_step, trial, pred_arch, nodes, kernel, stride, lr)
+    output = runModel(0.9, 0.9, 5, 10, time_step, trial, pred_arch, nodes, kernel, stride, lr)
     result.loc[i] = output
 
 
