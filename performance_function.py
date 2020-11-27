@@ -4,41 +4,39 @@ Created on Thu Nov 12 23:52:54 2020
 
 @author: didie
 """
-from DataSplit_functions import setNNFormat
-import numpy as np
-import torch
-from Visualize_functions import plot_line
 
-def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Net, plot = False):
+import numpy as np
+from Visualize_functions import plot_line
+from DataSplit_functions import setNNFormat
+def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Nets, plot = False):
     electrodes, time_steps, trials = EEG_data_test.shape
     prediction_input = setNNFormat(EEG_data_test, electrodes)
     prediction_output = np.zeros((brain_areas, trials * time_steps)) 
-    
+    time_series = np.zeros((brain_areas, trials, time_steps))
     source_test = np.zeros((trials, brain_areas))
     for trial in range(trials):
         source_test[trial, sources_test[trial,:]] = 1
+    source_prediction_values = np.zeros((trials, brain_areas))
     
     for brain_area in range(brain_areas):
         output = NeuralNets[brain_area](prediction_input)
         prediction_output[brain_area, :] = output.view(-1).detach().numpy()
-        if plot: plot_line([prediction_output[brain_area, :], np.repeat(source_test[:, brain_area], time_steps)], str(brain_area))
-    time_series = prediction_output.reshape(brain_areas, trials, time_steps)
+        time_series[brain_area, :, :] = prediction_output[brain_area, :].reshape(trials, time_steps)
     
-    classification_input = torch.Tensor(prediction_output.reshape((-1, 1, time_steps)))
-    classification_output = CNN_Net(classification_input)
+        classification_input = output.view(-1, 1, time_steps)
+        classification_output = CNN_Nets[brain_area](classification_input)
+        source_prediction_values[:, brain_area] = classification_output.view(-1).detach().numpy()
     
-    source_prediction_values = classification_output.reshape((trials, brain_areas))
-    source_prediction_values = source_prediction_values.detach().numpy()
     source_prediction = source_prediction_values > 0.5      
     
-    predicted_active_areas = np.zeros((trials, 3))
+    predicted_active_areas = np.zeros((trials, brain_areas))
     for trial in range(trials):
-        predicted_active_areas[trial, :] = source_prediction_values[trial, :].argsort()[-3:]
+        sorted_predictions = np.sort(source_prediction_values[trial, :])
+        predicted_active_areas[trial, :] = source_prediction_values[trial, :] >= sorted_predictions[-3]   
     
-    correct_area_predictions = (predicted_active_areas == sources_test).sum()
-    area_accuracy = correct_area_predictions / predicted_active_areas.size
-    
-        
+    wrong_predictions = ((trials * brain_areas)  - np.equal(predicted_active_areas, source_test).sum()) / 2 
+    area_accuracy = 1 - wrong_predictions / (trials * 3) 
+              
     true_positive = ((source_prediction == 1) & (source_test == 1)).sum() / (source_test == 1).sum()
     true_negative = ((source_prediction == 0) & (source_test == 0)).sum() / (source_test == 0).sum()
     
@@ -53,7 +51,8 @@ def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, Ne
     
     if plot:
         for brain_area in range(brain_areas):
-            plot_line([reals[brain_area,:], prediction_output[brain_area, :]], str(brain_area))  
+            plot_line([prediction_output[brain_area, :], np.repeat(source_test[:, brain_area], time_steps), np.repeat(source_prediction_values[:, brain_area],time_steps)], str(brain_area))
+            plot_line([reals[brain_area,:], prediction_output[brain_area, :]], "fit" + str(brain_area))  
                 
     mse = np.array(mse)
     mean_mse = mse.mean()

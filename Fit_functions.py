@@ -6,13 +6,11 @@ Created on Thu Nov 12 12:48:20 2020
 """
 import torch
 import numpy as np
-import pandas as pd
-import torch, os, random
+import os, random
 from copy import deepcopy
 import torch.optim as optim
 import torch.nn as nn
-import numpy as np
-from tqdm import tqdm
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from NeuralNetwork_functions import NeuralNet, CNN
 from DataSplit_functions import prepareProjectionData, prepareClassificationData

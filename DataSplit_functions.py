@@ -4,7 +4,7 @@ Created on Thu Aug  6 12:00:28 2020
 
 @author: didie
 """
-import pickle, torch, os, random
+import torch, os, random
 import numpy as np
 from itertools import compress
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
