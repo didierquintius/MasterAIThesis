@@ -10,12 +10,13 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 
 #%%
-def plot_line(traces):
-    fig = [] 
+def plot_line(traces, title = None):
+    fig = []
+    if title == None: title = str(random.random())
     for trace in traces:
         x = np.arange(len(trace))
         fig += [go.Scatter(x = x, y = trace, mode = "lines")]
-    pyo.plot(fig)
+    pyo.plot(fig, filename = title + '.html')
     
 def plot_accuracy(NeuralNets, X, y, n_neurons_to_plot = 3):
     neurons = len(NeuralNets)

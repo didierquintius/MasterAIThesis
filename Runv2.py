@@ -12,8 +12,8 @@ from DataSplit_functions import splitTestData, prepareClassificationData
 from performance_function import test_performance
 
 
-def runModel(snr, cnr, noisy_areas, brain_areas, time_steps, trials, pred_arch,
-             nodes, kernel, stride, lr):
+def runModel(snr, cnr, noisy_areas, brain_areas, time_steps, trials, pred_arch, preportion,
+             nodes, kernel, stride, lr, plot):
     def importData(snr, cnr, noisy_areas, brain_areas, time_steps, trials):
         data_file = "../Data/EEG/data_" + str(snr) + "_" + str(cnr) + "_" + str(noisy_areas) + "_" + str(brain_areas) + "_" + str(time_steps) + "_" + str(trials) + ".pkl"
         
@@ -31,13 +31,13 @@ def runModel(snr, cnr, noisy_areas, brain_areas, time_steps, trials, pred_arch,
     del EEG_data, sources, activity
     
     #%%
-    NeuralNets, mean_train_pred, std_train_pred, val_losses_pred, STOP_pred = fitProjectionModels(EEG_data_trainval, sources_trainval, noisy_sources_trainval, activity_trainval, brain_areas, architecture = pred_arch)
+    NeuralNets, mean_train_pred, std_train_pred, val_losses_pred, STOP_pred = fitProjectionModels(EEG_data_trainval, sources_trainval, noisy_sources_trainval, activity_trainval, brain_areas, architecture = pred_arch, preportion = preportion)
     
     #%%
-    X, y = prepareClassificationData(EEG_data_trainval,sources_trainval,brain_areas,NeuralNets)
+    X, y = prepareClassificationData(EEG_data_trainval,sources_trainval,brain_areas,NeuralNets, plot)
     #%%
     
     CNN_Net, train_performance_clas, val_losses_clas, STOP_clas = fitClassificationModel(X, y, nodes, kernel, stride, lr)
-    area_accuracy, true_positive, true_negative, mean_mse, std_mse = test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Net)
+    area_accuracy, true_positive, true_negative, mean_mse, std_mse = test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Net, plot)
     
     return [mean_train_pred, std_train_pred, train_performance_clas, STOP_pred[0], STOP_clas, area_accuracy, true_positive, true_negative, mean_mse, std_mse]

@@ -64,7 +64,7 @@ def splitTestData(EEG_data, sources, noisy_sources, activity, test_perc = 0.2):
     activity_trainval = activity[:,:,test_ind:]
     sources_trainval = sources[test_ind:,:]
     noisy_sources_trainval = sources[test_ind:,:]
-    
+
     return EEG_data_test,  sources_test, noisy_sources_test, activity_test, EEG_data_trainval,  sources_trainval, noisy_sources_trainval, activity_trainval
 
 def setNNFormat(data, nn_input):
@@ -108,30 +108,27 @@ def prepareProjectionData(EEG_data, sources, noisy_sources, activity, brain_area
     activity_train['silent'] = setNNFormat(np.zeros((1, time_steps, len(silent_trials) - val_ind)), 1)
     
     active_activity_val  = filterActivityData(activity, active_trials[:val_ind])
-    silent_activity_val = np.zeros((1, time_steps, val_ind))
-    activity_val = np.append(active_activity_val, silent_activity_val, 2)
-    activity_val = activity_val[:,:, val_order]
+    silent_activity_val = np.zeros((time_steps, val_ind))
+    activity_val = np.append(active_activity_val, silent_activity_val, 1)
+    activity_val = activity_val[:, val_order]
     activity_val = setNNFormat(activity_val, 1)
-    
+
     return EEG_train, activity_train, EEG_val, activity_val
     
-def prepareClassificationData(EEG_data, sources, brain_areas, NeuralNets, train_perc = 0.7, val_perc = 0.1):
+def prepareClassificationData(EEG_data, sources,brain_area, NeuralNet, train_perc = 0.7, val_perc = 0.1):
     random.seed(0)
     electrodes, time_steps, trials = EEG_data.shape
     NNinput_EEG = setNNFormat(EEG_data, electrodes)
 
-    
-    brain_area_activity = torch.Tensor(np.zeros((trials * brain_areas, 1)))
+    brain_area_activity = torch.Tensor(np.zeros((trials, 1)))
     for trial, active_areas in enumerate(sources.tolist()):
-        for area in active_areas:
-            brain_area_activity[area * trials + trial ,0] = 1
+        if brain_area in active_areas:
+            brain_area_activity[trial ,0] = 1
     
-    activity_prediction = torch.Tensor()
-    for brain_area in range(brain_areas):
-        prediction = NeuralNets[brain_area](NNinput_EEG)
-        activity_prediction = torch.cat((activity_prediction, prediction))
+
+    prediction = NeuralNet(NNinput_EEG)
         
-    activity_prediction = activity_prediction.reshape((-1, 1, time_steps)) 
+    activity_prediction = prediction.reshape((-1, 1, time_steps)) 
     
     active_time_series = np.where(brain_area_activity == 1)[0]
     idle_time_series =  np.where(brain_area_activity == 0)[0]
@@ -152,5 +149,5 @@ def prepareClassificationData(EEG_data, sources, brain_areas, NeuralNets, train_
     y["train"] = {}
     y["train"]["active"] = brain_area_activity[active_time_series[val_ind:],:]
     y["train"]["idle"] = brain_area_activity[idle_time_series[val_ind:],:]
-
+    #raise ValueError
     return X, y
