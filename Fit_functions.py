@@ -21,7 +21,7 @@ def calc_loss(Net, X, y, loss_function):
     return np.float(loss)
 
 class Validation():
-    def __init__(self,max_val_amount, loss_function, X, y):
+    def __init__(self,max_val_amount, min_increment, loss_function, X, y):
         self.loss_function = loss_function
         self.val_counter = 0
         self.max_val_amount = max_val_amount
@@ -30,11 +30,12 @@ class Validation():
         self.val_losses = []
         self.X_val = X
         self.y_val = y
+        self.min_increment = min_increment
         
     def update(self, Net):
         
         self.val_losses += [calc_loss(Net, self.X_val, self.y_val, self.loss_function)]
-        if self.val_losses[-1] > self.min_val:
+        if (self.min_val - self.val_losses[-1]  < self.min_increment):
             self.val_counter +=1
             if self.val_counter > self.max_val_amount:
                 return self.min_Net, "Max val increment"
@@ -64,7 +65,7 @@ def updateNet(Net, X, y, batch, loss_function, optimizer):
     return loss
 
 def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, architecture = [20], learning_rate = 1e-4, EPOCHS = 20,
-                       batch_size = 50, max_val_amount = 100, val_freq = 5, preportion = 1):
+                       batch_size = 50, max_val_amount = 50, val_freq = 5, preportion = 1, min_increment = 1e-7):
     
     X_train, y_train, X_val, y_val = prepareProjectionData(EEG, sources, noisy_sources, activity, brain_area)
 
@@ -75,7 +76,7 @@ def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, archite
     optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
     loss_function = nn.MSELoss()
     
-    Validator = Validation(max_val_amount, loss_function, X_val, y_val)
+    Validator = Validation(max_val_amount, min_increment, loss_function, X_val, y_val)
 
     balanced_chunks = createBatches(np.arange(silent_measurements), active_measurements * preportion)
     for epoch in range(EPOCHS):
@@ -103,14 +104,14 @@ def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, archite
     return Net, train_performance, Validator.val_losses, "Max Epochs" 
 
 def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, architecture = [20], learning_rate = 1e-4, EPOCHS = 20,
-                       batch_size = 50, max_val_amount = 300, val_freq = 5, preportion = 1):
+                       batch_size = 50, max_val_amount = 200, val_freq = 5, preportion = 1, min_increment = 1e-7):
     NeuralNets = {}
     train_performances = []
     val_losses = {}
     STOPs = [] 
     
     for brain_area in range(no_brain_areas):
-        NeuralNets[brain_area], train_performance, val_losses[brain_area], STOP = fitProjectionModel(EEG, sources, noisy_sources, activity, brain_area, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq, preportion)
+        NeuralNets[brain_area], train_performance, val_losses[brain_area], STOP = fitProjectionModel(EEG, sources, noisy_sources, activity, brain_area, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq, preportion, min_increment)
         train_performances += [train_performance]
         STOPs += [STOP]
 
@@ -121,7 +122,7 @@ def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, ar
                            
 def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, NeuralNet, nodes = [10, 15], kernel_sizes = [5], strides = [3],
                           learning_rate = 1e-4, EPOCHS = 100, batch_size = 50,
-                          max_val_amount = 400, val_freq = 10):
+                          max_val_amount = 200, val_freq = 5, preportion = 1, min_increment = 1e-9):
     X, y = prepareClassificationData(EEG_data_trainval,sources_trainval, brain_area, NeuralNet)
     time_steps = X["val"].shape[2]
     idle_trials = X["train"]["idle"].shape[0]
@@ -131,8 +132,8 @@ def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, Neur
     optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
     loss_function = nn.BCELoss()
     
-    Validator = Validation(max_val_amount, loss_function, X["val"], y["val"])
-    balanced_idle_indexes = createBatches(np.arange(idle_trials), active_trials)
+    Validator = Validation(max_val_amount, min_increment, loss_function, X["val"], y["val"])
+    balanced_idle_indexes = createBatches(np.arange(idle_trials), active_trials * preportion)
     for epoch in range(EPOCHS):
         for balanced_idle_index in balanced_idle_indexes:
             X_balanced = torch.cat((X["train"]["active"], X["train"]["idle"][balanced_idle_index,:,:]))
@@ -157,14 +158,14 @@ def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, Neur
 
 def fitClassificationModels(EEG_data_trainval,sources_trainval,brain_areas,NeuralNets, nodes = [10, 15], kernel_sizes = [5], strides = [3],
                         learning_rate = 1e-4, EPOCHS = 100, batch_size = 50,
-                        max_val_amount = 400, val_freq = 10):
+                        max_val_amount = 200, val_freq = 5, preportion = 1, min_increment = 1e-9):
     CNNs = {}
     train_performances = []
     val_losses = {}
     STOPs = [] 
     no_brain_areas = len(NeuralNets)
     for brain_area in range(no_brain_areas):
-        CNNs[brain_area], train_performance, val_losses[brain_area], STOP = fitClassificationModel(EEG_data_trainval,sources_trainval,brain_area, NeuralNets[brain_area], nodes,kernel_sizes,strides,learning_rate,EPOCHS,batch_size,max_val_amount,val_freq)
+        CNNs[brain_area], train_performance, val_losses[brain_area], STOP = fitClassificationModel(EEG_data_trainval,sources_trainval,brain_area, NeuralNets[brain_area], nodes,kernel_sizes,strides,learning_rate,EPOCHS,batch_size,max_val_amount,val_freq, preportion, min_increment)
         train_performances += [train_performance]
         STOPs += [STOP]
 

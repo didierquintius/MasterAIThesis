@@ -18,12 +18,15 @@ def plot_line(traces, title = None):
         fig += [go.Scatter(x = x, y = trace, mode = "lines")]
     pyo.plot(fig, filename = title + '.html')
     
-def plot_accuracy(NeuralNets, X, y, n_neurons_to_plot = 3):
-    neurons = len(NeuralNets)
-    neurons_to_plot = random.sample(range(neurons),n_neurons_to_plot)
-    for neuron in neurons_to_plot:
-        pred = NeuralNets[neuron](X[str(neuron)]["test"])
-        plot_line([pred.detach().transpose(0,1)[0], y[str(neuron)]["test"].transpose(0,1)[0]])
+def plot_hyperparameters(results, goal_vars, hyper_params):
+    for param in hyper_params:
+        data = results[[param] + goal_vars]
+        data = data.groupby(param).mean()
+        fig = []
+        for goal_var in goal_vars:
+            fig += [go.Bar(name = goal_var, x = data.index.tolist(), y = data[goal_var])]
+        pyo.plot(go.Figure(data = fig).update_layout(barmode='stack'), filename = param + '.jpg')
+        
         
     
     

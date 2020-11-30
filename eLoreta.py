@@ -6,6 +6,7 @@ Created on Sun Aug  9 09:50:32 2020
 """
 
 import numpy as np
+import pickle
 
 def eloreta(LL, gamma):
     nchan, ng = LL.shape
@@ -39,3 +40,10 @@ def eloreta(LL, gamma):
         A[:, i] = (Winv[:, i] * ktm[i, :]).T
     
     return A
+
+def eLoretaModel(EEG, brain_areas):
+    projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
+    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],int(np.ceil(projection_matrix.shape[1]/brain_areas)))]
+    
+    InverseMatrix = eloreta(projection_matrix, 100)
+    prediction = EEG @ projection_matrix
