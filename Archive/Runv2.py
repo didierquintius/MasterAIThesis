@@ -14,7 +14,7 @@ def importData(snr, cnr, noisy_areas, brain_areas, time_steps, trials, seed = 0)
         data_file = "../Data/EEG/data_" + str(snr) + "_" + str(cnr) + "_" + str(noisy_areas) + "_" + str(brain_areas) + "_" + str(time_steps) + "_" + str(trials) + ".pkl"
         
         if os.path.exists(data_file):            
-            EEG_data, sources, noisy_sources, activity = pickle.load(open(data_file, "rb"))
+            EEG_data, sources, activity = pickle.load(open(data_file, "rb"))
         else:
             EEG_data, sources, noisy_sources, activity =  EEG_signal(time_steps, trials, brain_areas,
                                                       snr, cnr, noisy_areas, seed)
@@ -27,9 +27,9 @@ def runModel(snr, cnr, noisy_areas, brain_areas, params, plot = False, prev_data
     time_steps, trials, pred_arch, clas_arch, kernel, stride, preportion_pred, preportion_clas, lr_pred, lr_clas, batch_pred, batch_clas, val_treshold_pred, val_treshold_clas = params
     #%%
     
-    EEG_data_trainval,  sources_trainval, noisy_sources_trainval, activity_trainval = importData(snr, cnr, noisy_areas, brain_areas, time_steps, trials, seed)
-    EEG_data_test,  sources_test, noisy_sources_test, activity_test,  = importData(snr, cnr, noisy_areas, brain_areas, time_steps, int(trials * 0.2), seed + 1)
-
+    EEG_data, sources, noisy_sources, activity =  importData(snr, cnr, noisy_areas, brain_areas, time_steps, trials, seed)
+    EEG_data_test,  sources_test, noisy_sources_test, activity_test, EEG_data_trainval,  sources_trainval, noisy_sources_trainval, activity_trainval = splitTestData(EEG_data, sources, noisy_sources, activity)
+    del EEG_data, sources, activity
     
     #%%
     NeuralNets, train_pred, val_losses_pred, STOP_pred = fitProjectionModels(EEG_data_trainval, sources_trainval, noisy_sources_trainval, activity_trainval,

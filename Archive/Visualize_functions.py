@@ -21,13 +21,15 @@ def plot_line(traces, title = None):
 def plot_hyperparameters(results, goal_vars, hyper_params):
     for param in hyper_params:
         data = results[[param] + goal_vars]
+        data = data.groupby(param).mean()
+        fig = []
         for goal_var in goal_vars:
-            fig = [go.Box(name = goal_var, x = data[param], y = data[goal_var])]
-            pyo.plot(go.Figure(data = fig).update_layout(barmode='stack'), filename = param + "_" + goal_var +'.html')
+            fig += [go.Bar(name = goal_var, x = data.index.tolist(), y = data[goal_var])]
+        pyo.plot(go.Figure(data = fig).update_layout(barmode='stack'), filename = param + '.jpg')
 
 def plot_results(result):
-    plot_hyperparameters(result, ['mean_train_pred', "time"], ["pred_arch","preportion_pred",'lr_pred', 'batch_pred', 'val_treshold_pred'])
-    plot_hyperparameters(result, ['mean_train_clas', "time"], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr_clas", "preportion_clas",'batch_clas', 'val_treshold_clas'])
+    plot_hyperparameters(result, ['mean_train_pred', 'std_train_pred'], ["pred_arch","preportion",'learning_rate_pred', 'batch_pred', 'val_treshold_pred'])
+    plot_hyperparameters(result, ['mean_train_clas', 'std_train_clas'], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr", "preportion_clas",'batch_clas', 'val_treshold_clas'])
 
         
     

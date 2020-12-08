@@ -101,7 +101,7 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
     active_brain_areas = active_brain_areas[shuffled_indexes, :]
     noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
     data = (EEG_Data, active_brain_areas, noisy_brain_areas, activity)
-    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials)+ ".pkl", "wb" ))
+    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
     
     if not only_save:
         return data

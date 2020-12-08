@@ -13,10 +13,8 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from Runv2 import runModel
 from tqdm import tqdm
 import pandas as pd
-import pickle
-from Visualize_functions import plot_results
-import time
-def grid_search_params(run, time_steps = [50], trials = [100],
+
+def grid_search_params(run, time_steps = [50], trials = [8000],
                         pred_nodes = [[i] for i in range(25, 201, 25)],
                         nodes_CNN = [i for i in range(10, 31, 3)],
                         nodes_Dense = [i for i in range(5, 41, 5)],
@@ -38,23 +36,22 @@ def grid_search_params(run, time_steps = [50], trials = [100],
     return tuple(params)
 
 result = pd.DataFrame([], columns = ["time_steps", 'trials', 'pred_arch', 'nodes_CNN', 'nodes_Dense', 'kernel',
-                                     'stride',  'lr_pred', 'lr_clas', 'preportion_pred', 'preportion_clas',
-                                      'batch_pred', 'batch_clas', 'val_treshold_pred',
+                                     'stride', 'preportion_pred', 'preportion_clas', 'lr_pred',
+                                     'lr_clas', 'batch_pred', 'batch_clas', 'val_treshold_pred',
                                      'val_treshold_clas',"mean_train_pred", 
                                      "std_train_pred", "mean_train_clas",
                                      "std_train_clas", "STOP_pred", "STOP_clas",
                                      "area_accuracy", "true_positive", "true_negative", 
-                                     "mean_mse", "std_mse", "time"])
+                                     "mean_mse", "std_mse"])
 
 #%%
 prev_data_pred = {}
 prev_data_clas = {}
-runs = 200
+runs = 150
 repeats = 1
-for i in tqdm(range(108,runs)):
+for i in tqdm(range(50,runs)):
     params = grid_search_params(i)
-    start = time.time()
-    output, NeuralNets, STOP_pred, CNN_Nets, STOP_clas, train_pred, train_clas = runModel(0.9, 0.9, 5, 10, params, seed = 0)
+    output, NeuralNets, STOP_pred, CNN_Nets, STOP_clas, train_pred, train_clas = runModel(0.9, 0.9, 25, 50, params, seed = 0)
 
     # for seed in tqdm(range(1,repeats)):
     #     print(output[19], output[20])
@@ -63,7 +60,5 @@ for i in tqdm(range(108,runs)):
     #         prev_data_clas[area] = (CNN_Nets[area], STOP_clas[area], train_clas)
     #     output, NeuralNets, STOP_pred, CNN_Nets, STOP_clas, train_pred, train_clas = runModel(0.9, 0.9, 5, 10, params,False,prev_data_pred,prev_data_clas, seed)
     
-    result.loc[i] = output + [time.time() - start]
-    pickle.dump(result, open("result.pkl", "wb"))
-#%%
-plot_results(result)
+    result.loc[i] = output    
+    

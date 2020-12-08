@@ -64,7 +64,7 @@ def updateNet(Net, X, y, batch, loss_function, optimizer):
     optimizer.step()
     return loss
 
-def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, architecture = [20], learning_rate = 1e-4, EPOCHS = 8,
+def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, architecture = [20], learning_rate = 1e-4, EPOCHS = 20,
                        batch_size = 50, max_val_amount = 5, val_freq = 5, preportion = 1, min_increment = 1e-6, prev_net = None):
     X_train, y_train, X_val, y_val = prepareProjectionData(EEG, sources, noisy_sources, activity, brain_area)
 
@@ -112,14 +112,14 @@ def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, archite
     train_performance = np.float(loss_function(Net(X_train), y_train))              
     return Net, train_performance, Validator.val_losses, "Max Epochs" 
 
-def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, architecture = [20], learning_rate = 1e-4, EPOCHS = 12,
+def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, architecture = [20], learning_rate = 1e-4, EPOCHS = 20,
                        batch_size = 50, max_val_amount = 50, val_freq = 5, preportion = 1, min_increment = 1e-7, prev_nets = None):
     NeuralNets = {}
     train_performances = {}
     val_losses = {}
     STOPs = {} 
     
-    for brain_area in range(no_brain_areas):
+    for brain_area in tqdm(range(no_brain_areas)):
         # if prev_nets == None:
         #     prev_net= None
         # else:
@@ -184,7 +184,7 @@ def fitClassificationModels(EEG_data_trainval,sources_trainval,brain_areas,Neura
     val_losses = {}
     STOPs = {}
     no_brain_areas = len(NeuralNets)
-    for brain_area in range(no_brain_areas):
+    for brain_area in tqdm(range(no_brain_areas)):
         if prev_nets == None: 
             prev_net = None
         else:
