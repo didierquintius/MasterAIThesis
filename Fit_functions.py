@@ -65,7 +65,7 @@ def updateNet(Net, X, y, batch, loss_function, optimizer):
     return loss
 
 def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, architecture = [20], learning_rate = 1e-4, EPOCHS = 8,
-                       batch_size = 50, max_val_amount = 5, val_freq = 5, preportion = 1, min_increment = 1e-6, prev_net = None):
+                       batch_size = 50, max_val_amount = 5, val_freq = 5, preportion = 1, min_increment = 1e-6, prev_net = None, optimizer = None):
     X_train, y_train, X_val, y_val = prepareProjectionData(EEG, sources, noisy_sources, activity, brain_area)
 
     active_measurements , electrodes = X_train['active'].shape
@@ -75,7 +75,8 @@ def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, archite
         Net = NeuralNet(electrodes, architecture, 1)
     else:
         Net = prev_net
-    optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
+    if optimizer == None:
+        optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
     loss_function = nn.MSELoss()
     
     Validator = Validation(max_val_amount, min_increment, loss_function, X_val, y_val)
@@ -104,42 +105,44 @@ def fitProjectionModel(EEG, sources,noisy_sources, activity, brain_area, archite
                         X_train = torch.cat((X_train['active'], X_train['silent']))
                         y_train = torch.cat((y_train['active'], y_train['silent']))   
                         train_performance = np.float(loss_function(Net(X_train), y_train))
-                        return Net, train_performance, Validator.val_losses, STOP
+                        return Net, train_performance, Validator.val_losses, STOP, None
 
 
     X_train = torch.cat((X_train['active'], X_train['silent']))
     y_train = torch.cat((y_train['active'], y_train['silent']))            
     train_performance = np.float(loss_function(Net(X_train), y_train))              
-    return Net, train_performance, Validator.val_losses, "Max Epochs" 
+    return Net, train_performance, Validator.val_losses, "Max Epochs", optimizer
 
-def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, architecture = [20], learning_rate = 1e-4, EPOCHS = 12,
-                       batch_size = 50, max_val_amount = 50, val_freq = 5, preportion = 1, min_increment = 1e-7, prev_nets = None):
+def fitProjectionModels(EEG, sources,noisy_sources, activity, no_brain_areas, architecture = [20], learning_rate = 1e-4, EPOCHS = 8,
+                       batch_size = 50, max_val_amount = 50, val_freq = 5, preportion = 1, min_increment = 1e-7, prev_nets = None, optimizer = None):
     NeuralNets = {}
     train_performances = {}
     val_losses = {}
     STOPs = {} 
-    
-    for brain_area in range(no_brain_areas):
-        # if prev_nets == None:
-        #     prev_net= None
-        # else:
-        #     prev_net, STOP, train = prev_nets[brain_area]
-        #     #TODO: dit kan niet zomaar want de oude waarden moeten overschreven worden en de neuralbetworks doorgegeven
-        #     if STOP != 'Max Epochs': 
-        #         NeuralNets[brain_area] = prev_net
-        #         train_performances[brain_area] = train
-        #         STOPs[brain_area] = 'Max val increment'
-        #         continue
-        NeuralNets[brain_area], train_performances[brain_area], val_losses[brain_area], STOPs[brain_area] = fitProjectionModel(EEG, sources, noisy_sources, activity, brain_area, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq, preportion, min_increment)
+    optimizers = {}
+    for brain_area in tqdm(range(no_brain_areas)):
+        if prev_nets == None:
+            prev_net= None
+            optimizer = None
+        else:
+            prev_net, STOP, train, optimizer = prev_nets[brain_area]
+            #TODO: dit kan niet zomaar want de oude waarden moeten overschreven worden en de neuralbetworks doorgegeven
+            if STOP != 'Max Epochs': 
+                NeuralNets[brain_area] = prev_net
+                train_performances[brain_area] = train
+                STOPs[brain_area] = 'Max val increment'
+                optimizers[brain_area] = optimizer
+                continue
+        NeuralNets[brain_area], train_performances[brain_area], val_losses[brain_area], STOPs[brain_area], optimizers[brain_area] = fitProjectionModel(EEG, sources, noisy_sources, activity, brain_area, architecture, learning_rate , EPOCHS, batch_size , max_val_amount, val_freq, preportion, min_increment, prev_net)
 
 
     train_performance = np.array(list(train_performances.values()))
     STOPs = list(STOPs.values())
-    return NeuralNets, train_performance, val_losses, STOPs
+    return NeuralNets, train_performance, val_losses, STOPs, optimizers
                            
 def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, NeuralNet, nodes = [10, 15], kernel_sizes = [5], strides = [3],
                           learning_rate = 1e-4, EPOCHS = 100, batch_size = 50,
-                          max_val_amount = 200, val_freq = 5, preportion = 1, min_increment = 1e-9, prev_net = None):
+                          max_val_amount = 200, val_freq = 5, preportion = 1, min_increment = 1e-9, prev_net = None, optimizer = None):
     X, y = prepareClassificationData(EEG_data_trainval,sources_trainval, brain_area, NeuralNet)
     time_steps = X["val"].shape[2]
     idle_trials = X["train"]["idle"].shape[0]
@@ -149,7 +152,9 @@ def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, Neur
         Net = CNN(time_steps, nodes, kernel_sizes, strides)
     else:
         Net = prev_net
-    optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
+    if optimizer == None:
+        optimizer = optim.Adam(Net.parameters(), lr =  learning_rate)
+        if optimizer == None: raise ValueError  
     loss_function = nn.BCELoss()
     
     Validator = Validation(max_val_amount, min_increment, loss_function, X["val"], y["val"])
@@ -171,10 +176,12 @@ def fitClassificationModel(EEG_data_trainval, sources_trainval, brain_area, Neur
                     Net, STOP = Validator.update(Net)                
                     if STOP != "": 
                         train_performance = np.float(loss_function(Net(X_balanced), y_balanced))
-                        return Net, train_performance, Validator.val_losses, STOP
+                        return Net, train_performance, Validator.val_losses, STOP, None
                     
-    train_performance = np.float(loss_function(Net(X_balanced), y_balanced))              
-    return Net, train_performance, Validator.val_losses, "Max Epochs"                 
+    train_performance = np.float(loss_function(Net(X_balanced), y_balanced))   
+    if optimizer == None:
+        raise ValueError           
+    return Net, train_performance, Validator.val_losses, "Max Epochs", optimizer          
 
 def fitClassificationModels(EEG_data_trainval,sources_trainval,brain_areas,NeuralNets, nodes = [10, 15], kernel_sizes = [5], strides = [3],
                         learning_rate = 1e-4, EPOCHS = 100, batch_size = 50,
@@ -184,19 +191,22 @@ def fitClassificationModels(EEG_data_trainval,sources_trainval,brain_areas,Neura
     val_losses = {}
     STOPs = {}
     no_brain_areas = len(NeuralNets)
-    for brain_area in range(no_brain_areas):
+    optimizers = {}
+    for brain_area in tqdm(range(no_brain_areas)):
         if prev_nets == None: 
             prev_net = None
+            optimizer = None
         else:
-            prev_net, STOP, train = prev_nets[brain_area]
+            prev_net, STOP, train, optimizer = prev_nets[brain_area]
             if STOP != 'Max Epochs': 
                 CNNs[brain_area] = prev_net
                 train_performances[brain_area] = train
                 STOPs[brain_area] = 'Max val increment'
+                optimizers[brain_area] = optimizer
                 continue
-        CNNs[brain_area], train_performances[brain_area], val_losses[brain_area], STOPs[brain_area] = fitClassificationModel(EEG_data_trainval,sources_trainval,brain_area, NeuralNets[brain_area], nodes,kernel_sizes,strides,learning_rate,EPOCHS,batch_size,max_val_amount,val_freq, preportion, min_increment, prev_net)
-
+        hi = fitClassificationModel(EEG_data_trainval,sources_trainval,brain_area, NeuralNets[brain_area], nodes,kernel_sizes,strides,learning_rate,EPOCHS,batch_size,max_val_amount,val_freq, preportion, min_increment, prev_net)
+        CNNs[brain_area], train_performances[brain_area], val_losses[brain_area], STOPs[brain_area], optimizers[brain_area] = hi
 
     train_performance = np.array(list(train_performances.values()))
     STOPs = list(STOPs.values())
-    return CNNs, train_performance, val_losses, STOPs
+    return CNNs, train_performance, val_losses, STOPs, optimizers

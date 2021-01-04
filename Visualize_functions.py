@@ -10,24 +10,26 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 
 #%%
-def plot_line(traces, title = None):
+def plot_line(traces,names, title = None):
     fig = []
     if title == None: title = str(random.random())
-    for trace in traces:
+    for i, trace in enumerate(traces):
         x = np.arange(len(trace))
-        fig += [go.Scatter(x = x, y = trace, mode = "lines")]
+        fig += [go.Scatter(name = names[i], x = x, y = trace, mode = "lines")]
     pyo.plot(fig, filename = title + '.html')
     
 def plot_hyperparameters(results, goal_vars, hyper_params):
     for param in hyper_params:
         data = results[[param] + goal_vars]
         for goal_var in goal_vars:
-            fig = [go.Box(name = goal_var, x = data[param], y = data[goal_var])]
-            pyo.plot(go.Figure(data = fig).update_layout(barmode='stack'), filename = param + "_" + goal_var +'.html')
+            fig = [go.Box(name = goal_var, x = data[param], y = data[goal_var], )]
+            fig = go.Figure(fig).update_layout(title = param + ":" + goal_var) 
+            pyo.plot(fig, filename = param + "_" + goal_var +'.html')
+            fig.write_image(param + "_" + goal_var +'.png')
 
 def plot_results(result):
-    plot_hyperparameters(result, ['mean_train_pred', "time"], ["pred_arch","preportion_pred",'lr_pred', 'batch_pred', 'val_treshold_pred'])
-    plot_hyperparameters(result, ['mean_train_clas', "time"], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr_clas", "preportion_clas",'batch_clas', 'val_treshold_clas'])
+    plot_hyperparameters(result, ['mean_train_pred', "time"], ["pred_arch","proportion_pred",'lr_pred', 'batch_pred', 'val_treshold_pred'])
+    plot_hyperparameters(result, ['mean_train_clas', "time"], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr_clas", "proportion_clas",'batch_clas', 'val_treshold_clas'])
 
         
     
