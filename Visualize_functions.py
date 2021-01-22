@@ -30,7 +30,10 @@ def plot_hyperparameters(results, goal_vars, hyper_params):
 def plot_results(result):
     plot_hyperparameters(result, ['mean_train_pred', "time"], ["pred_arch","proportion_pred",'lr_pred', 'batch_pred', 'val_treshold_pred'])
     plot_hyperparameters(result, ['mean_train_clas', "time"], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr_clas", "proportion_clas",'batch_clas', 'val_treshold_clas'])
+#%%
 
+
+    
         
     
     

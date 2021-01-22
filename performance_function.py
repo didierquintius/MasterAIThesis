@@ -63,18 +63,17 @@ def varModel(data, axis):
     return predicted_active_areas
 
     
-def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Nets,gamma = 100, plot = False):
+def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, NeuralNets, CNN_Nets,gamma = 100, plot = False, final = False):
     
     
     electrodes, time_steps, trials = EEG_data_test.shape
     
     def plot_performance(time_series, source_prediction_values, reals, source_test):
-        for brain_area in [46, 51]:
-            time_serie = time_series[brain_area, :, :].reshape(-1)
-            plot_line([time_serie, np.repeat(source_test[:, brain_area], time_steps), np.repeat(source_prediction_values[:, brain_area],time_steps)],["Predicted Activity","Real State","Predicted State"],  str(brain_area))
-            plot_line([reals[brain_area,:], time_serie],['Real Activity', 'Predicted Activity'], "fit" + str(brain_area))  
-    etime_series = eLoretaModel(EEG_data_test,100, gamma)[:, :, :100]
-    
+        brain_area = 0
+        time_serie = time_series[brain_area, :, :].reshape(-1)
+        plot_line([time_serie, np.repeat(source_test[:, brain_area], time_steps), np.repeat(source_prediction_values[:, brain_area],time_steps)],["Predicted Activity","Real State","Predicted State"],  str(brain_area))
+        plot_line([reals[brain_area,:], time_serie],['Real Activity', 'Predicted Activity'], "fit" + str(brain_area))  
+   
     source_test = np.zeros((trials, brain_areas))
     for trial in range(trials):
         source_test[trial, sources_test[trial,:]] = 1
@@ -82,33 +81,37 @@ def test_performance(EEG_data_test, sources_test, activity_test, brain_areas, Ne
     time_series, source_prediction_values = Model(EEG_data_test, NeuralNets, CNN_Nets)     
     
     mse = np.zeros((trials, 3))
-    emse = np.zeros((trials, 3))
+    if final:
+        emse = np.zeros((trials, 3))
+        etime_series = eLoretaModel(EEG_data_test,100, gamma)[:, :, :100]
     
     reals = np.zeros((brain_areas, trials * time_steps))
     
     for trial, active_neurons in enumerate(sources_test):
         for i, neuron in enumerate(active_neurons):
             real = activity_test[i, :, trial]
-            pred = time_series[neuron, trial, :]
-            epred = etime_series[trial,:, neuron]
+            pred = time_series[neuron, trial, :]            
             mse[trial, i] = ((real - pred)**2).mean()
-            emse[trial, i]= ((real - epred)**2).mean()
-            reals[neuron, (trial * time_steps):((trial + 1) * time_steps)] = real
-            
-    var_pred = varModel(time_series.T, 0)
-    var_epred = varModel(etime_series, 1)
+            if final: 
+                epred = etime_series[trial,:, neuron]
+                emse[trial, i]= ((real - epred)**2).mean()
+            reals[neuron, (trial * time_steps):((trial + 1) * time_steps)] = real        
     
-        
     area_accuracy, true_negative, true_positive, true_positive_area, true_negative_area = most_likely_sources(source_prediction_values, source_test)
-    vparea_accuracy, vptrue_negative, vptrue_positive, vptrue_positive_area, vptrue_negative_area = most_likely_sources(var_pred, source_test)
-    vearea_accuracy, vetrue_negative, vetrue_positive, vetrue_positive_area, vetrue_negative_area = most_likely_sources(var_epred, source_test)
     
     if plot: plot_performance(time_series, source_prediction_values, reals, source_test)
                 
     mean_mse = mse.mean()
     std_mse = mse.std()
-    emean_mse = emse.mean()
-    estd_mse = emse.std()
-       
-    return area_accuracy, true_positive, true_negative, vparea_accuracy,  vptrue_positive, vptrue_negative, vearea_accuracy,  vetrue_positive, vetrue_negative,  mean_mse, std_mse, emean_mse, estd_mse, time_series, mse, emse, source_prediction_values, true_positive_area, true_negative_area, vptrue_positive_area, vptrue_negative_area, vetrue_positive_area, vetrue_negative_area
-        
+    
+    if final:
+        var_pred = varModel(time_series.T, 0)
+        var_epred = varModel(etime_series, 1)
+    
+        vparea_accuracy, vptrue_negative, vptrue_positive, vptrue_positive_area, vptrue_negative_area = most_likely_sources(var_pred, source_test)
+        vearea_accuracy, vetrue_negative, vetrue_positive, vetrue_positive_area, vetrue_negative_area = most_likely_sources(var_epred, source_test)
+        emean_mse = emse.mean()
+        estd_mse = emse.std()
+           
+        return area_accuracy, true_positive, true_negative, vparea_accuracy,  vptrue_positive, vptrue_negative, vearea_accuracy,  vetrue_positive, vetrue_negative,  mean_mse, std_mse, emean_mse, estd_mse, time_series, mse, emse, source_prediction_values, true_positive_area, true_negative_area, vptrue_positive_area, vptrue_negative_area, vetrue_positive_area, vetrue_negative_area
+    return area_accuracy, true_positive, true_negative, mean_mse, std_mse
