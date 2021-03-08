@@ -68,8 +68,8 @@ def splitTestData(EEG_data, sources, noisy_sources, activity, test_perc = 0.2):
     return EEG_data_test,  sources_test, noisy_sources_test, activity_test, EEG_data_trainval,  sources_trainval, noisy_sources_trainval, activity_trainval
 
 def setNNFormat(data, nn_input):
-        data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
-        return data
+    data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
+    return data
     
 def prepareProjectionData(EEG_data, sources, noisy_sources, activity, brain_area, train_perc = 0.7, val_perc = 0.1):
   

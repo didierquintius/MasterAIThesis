@@ -41,9 +41,10 @@ def eloreta(LL, gamma):
     
     return A
 
-def eLoretaModel(EEG, brain_areas):
+def eLoretaModel(EEG, brain_areas, gamma = 1):
     projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
-    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],int(np.ceil(projection_matrix.shape[1]/brain_areas)))]
+    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],int(projection_matrix.shape[1]/brain_areas))]
     
-    InverseMatrix = eloreta(projection_matrix, 100)
-    prediction = EEG @ projection_matrix
+    InverseMatrix = eloreta(projection_matrix, gamma)
+    prediction = EEG.T @ InverseMatrix
+    return prediction

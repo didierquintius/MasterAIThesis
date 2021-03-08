@@ -45,10 +45,14 @@ def pink_noise(n, m):
 
     ff[:, 1:mid_point]=np.resize(scal,(m, mid_point -1))
     
-    noise=np.fft.fft(np.random.normal(size = (n1,m)),axis = 0)
-    noise=2*np.real(np.fft.ifft(np.transpose(np.multiply(noise, np.transpose(ff))), axis = 1))
+    noise=np.fft.fft(np.random.normal(size = (n1,m)))
+    combi = np.transpose(np.multiply(noise, np.transpose(ff)))
+    noise=2*np.real(np.fft.ifft(combi))
     noise=noise[:, :n]
     return noise
+
+def standardize(x):
+    return (x - x.mean())/x.std()
 
 def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise_ratio,
                 noise_sources, seed = 0, only_save = False):
@@ -56,7 +60,7 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
     # load projection matrix and subset to the relevant brain areas
     projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
     projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
-                                                   int(projection_matrix.shape[1]/no_brain_areas))]
+                                                   int(projection_matrix.shape[1]/(no_brain_areas - 1)))]
 
     # determine which brain areas will be active during each trial
     sample_list = np.arange(no_brain_areas).tolist()
@@ -67,30 +71,26 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
     for neuron in range(no_brain_areas):
         temp_sample_list = sample_list.copy()
         temp_sample_list.remove(neuron)
-        active_brain_areas = active_brain_areas + [[neuron] + random.sample(temp_sample_list, 2) for i in range(int(trials / no_brain_areas))]
+        amount = int(trials/no_brain_areas * (neuron + 1)) - int(trials/no_brain_areas * neuron)
+        active_brain_areas = active_brain_areas + [[neuron] + random.sample(temp_sample_list, 2) for i in range(amount)]
     no_electrodes = projection_matrix.shape[0]
     EEG_Data = np.zeros((no_electrodes, time_steps, trials))
     activity = generate(seed, time_steps, trials)
     
     for trial in range(trials):
         
-        noisy_activity = pink_noise(time_steps, noise_sources)
-        noisy_activity = noisy_activity / np.linalg.norm(noisy_activity, ord = 'fro')
-        activity_trial = activity[:,:,trial] / np.abs(activity[:,:,trial]).max()
+        noisy_activity = standardize(pink_noise(time_steps, noise_sources))
+        source_activity_trial = standardize(activity[:,:,trial])
         noisy_elements = np.random.choice(no_brain_areas, noise_sources, replace = False)
         noisy_brain_areas +=  [noisy_elements]
         
-        EEG_activity = projection_matrix[:, active_brain_areas[trial]] @ activity_trial
+        EEG_activity = projection_matrix[:, active_brain_areas[trial]] @ source_activity_trial
         EEG_noisy = projection_matrix[:, noisy_elements] @ noisy_activity
-        
-        EEG_signal = sig_noise_ratio * EEG_activity + (1 - sig_noise_ratio) * EEG_noisy
-        EEG_signal = EEG_signal / np.linalg.norm(EEG_signal, ord = "fro")
-        
+        EEG_signal = standardize(sig_noise_ratio * EEG_activity + (1 - sig_noise_ratio) * EEG_noisy)
         EEG_channel_noise = np.random.normal(size = (no_electrodes, time_steps))
-        EEG_channel_noise = EEG_channel_noise / np.linalg.norm(EEG_channel_noise, ord = "fro")
         
         EEG_Data[:,:,trial] = channel_noise_ratio * EEG_signal + (1 - channel_noise_ratio) * EEG_channel_noise
-        activity[:,:,trial] = activity_trial
+        activity[:,:,trial] = source_activity_trial
     
     active_brain_areas = np.array(active_brain_areas)
     noisy_brain_areas = np.array(noisy_brain_areas)
@@ -101,8 +101,78 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
     active_brain_areas = active_brain_areas[shuffled_indexes, :]
     noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
     data = (EEG_Data, active_brain_areas, noisy_brain_areas, activity)
-    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + ".pkl", "wb" ))
+    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials)+ ".pkl", "wb" ))
     
     if not only_save:
         return data
+    
+
+
+def Balanced_EEG(params, relevant_brain_area, sig_noise_ratio = 0.9, channel_noise_ratio = 0.9, seed = 0, save_noisy = False, only_save = False):
+    time_steps,trials,no_brain_areas, noise_sources = params['time_steps'], params['trials'], params['brain_areas'], int(0.5 * params['brain_areas'])
+    def active_areas(trial):
+        if trial < int(trials / 9):
+            return [relevant_brain_area] + random.sample(non_relevant_brain_areas, 2)
+        elif trial < int(trials * 2 / 9):
+            samples = random.sample(non_relevant_brain_areas, 2)
+            return [samples[0]] + [relevant_brain_area] + [samples[1]]
+        elif trial < int(trials / 3):
+            return random.sample(non_relevant_brain_areas, 2) + [relevant_brain_area] 
+        else:
+            return random.sample(non_relevant_brain_areas, 3)
+    
+    # load projection matrix and subset to the relevant brain areas
+    projection_matrix = pickle.load(open( "../Data/projection_matrix.pkl", "rb" ))
+    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
+                                                   int(projection_matrix.shape[1]/(no_brain_areas - 1)))]
+    
+
+    active_brain_areas = []
+    noisy_brain_areas = []
+    non_relevant_brain_areas = np.delete(np.arange(no_brain_areas), relevant_brain_area).tolist()
+    
+    no_electrodes, _ = projection_matrix.shape
+    EEG_Data = np.zeros((no_electrodes, time_steps, trials))
+    source_activity = generate(seed, time_steps, trials)
+    if save_noisy: noisy_activity = np.zeros((noise_sources,time_steps, trials))
+    else: noisy_activity = None
+
+    for trial in range(trials):
+        active_sources =  active_areas(trial)
+        active_brain_areas += [active_sources]
+        non_actives = np.delete(np.arange(no_brain_areas), active_sources).tolist()
+        noisy_sources = random.sample(non_actives, noise_sources)  
+        noisy_brain_areas += [noisy_sources]
+        
+        noisy_activity_trial = standardize(pink_noise(time_steps, noise_sources))
+        source_activity_trial = standardize(source_activity[:,:,trial])
+        
+        EEG_activity = projection_matrix[:, active_sources] @ source_activity_trial
+        EEG_noisy =    projection_matrix[:, noisy_sources]  @ noisy_activity_trial
+        
+        EEG_channel_noise = np.random.normal(size = (no_electrodes, time_steps))
+        
+        EEG_signal = standardize(sig_noise_ratio * EEG_activity + (1 - sig_noise_ratio) * EEG_noisy)
+
+        EEG_Data[:,:,trial] = channel_noise_ratio * EEG_signal + (1 - channel_noise_ratio) * EEG_channel_noise
+        source_activity[:,:,trial] = source_activity_trial
+        if save_noisy: noisy_activity[:,:,trial]= noisy_activity_trial
+        
+    
+    active_brain_areas = np.array(active_brain_areas)
+    noisy_brain_areas = np.array(noisy_brain_areas)
+    shuffled_indexes = np.arange(trials).tolist()
+    random.shuffle(shuffled_indexes)
+    EEG_Data = EEG_Data[:,:,shuffled_indexes]
+    source_activity = source_activity[:,:,shuffled_indexes]
+    if save_noisy: noisy_activity =  noisy_activity[:,:,shuffled_indexes]
+    active_brain_areas = active_brain_areas[shuffled_indexes, :]
+    noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
+    data = (EEG_Data, active_brain_areas, noisy_brain_areas, source_activity, noisy_activity)
+    pickle.dump(data, open( "../Data/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials)+ ".pkl", "wb" ))
+    
+    if not only_save:
+        return data
+
+    
 
