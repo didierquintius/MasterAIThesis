@@ -7,6 +7,7 @@ Created on Fri May 29 17:36:54 2020
 
 import pickle, random, os
 import numpy as np
+import torch
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 #%%
 def filterCorrespondingData(source_activity, source_dipoles, noisy_activity, noisy_dipoles, rel_dipole):
@@ -24,7 +25,6 @@ def filterCorrespondingData(source_activity, source_dipoles, noisy_activity, noi
     source_activity, source_trials = keep_relevant(source_activity, source_dipoles, rel_dipole)
     noisy_activity, noisy_trials = keep_relevant(noisy_activity, noisy_dipoles, rel_dipole)
     activity = source_activity + noisy_activity
-    activity = setNNFormat(noisy_activity, 1)
 
     return activity, source_trials, noisy_trials
 
@@ -129,7 +129,7 @@ def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise
 
 def Balanced_EEG(params, relevant_brain_area, sig_noise_ratio = 0.9, channel_noise_ratio = 0.9, seed = 0, only_save = False):
     time_steps,trials,no_brain_areas, noise_sources = params['time_steps'], params['trials'], params['brain_areas'], int(0.5 * params['brain_areas'])
-    file_name = os.environ['DATA'] + "/MasterAIThesis/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials) + "_" + str(seed) + ".pkl"
+    file_name = os.environ['DATA'] + "/MasterAIThesis/Training/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials) + "_" + str(relevant_brain_area) + "_" + str(seed) + ".pkl"
     if os.path.isfile(file_name):
         return pickle.load(open(file_name, "rb"))
         
@@ -192,10 +192,9 @@ def Balanced_EEG(params, relevant_brain_area, sig_noise_ratio = 0.9, channel_noi
     noisy_activity =  noisy_activity[:,:,shuffled_indexes]
     active_brain_areas = active_brain_areas[shuffled_indexes, :]
     noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
-    activity, source_trials, noisy_trials = filterCorrespondingData(source_activity, active_brain_areas, noisy_activity, noisy_brain_areas, brain_area)
+    activity, source_trials, noisy_trials = filterCorrespondingData(source_activity, active_brain_areas, noisy_activity, noisy_brain_areas, relevant_brain_area)
     data = (EEG_Data, activity, source_trials, noisy_trials)
     pickle.dump(data, open(file_name, "wb" ))
-    
     return data
 
     

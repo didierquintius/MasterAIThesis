@@ -10,12 +10,14 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 
 #%%
-def plot_line(traces,names, title = None):
+def plot_line(traces,names,dash = None, title = None):
+    if dash == None:
+        dash = ['solid'] * len(names)
     fig = []
     if title == None: title = str(random.random())
     for i, trace in enumerate(traces):
         x = np.arange(len(trace))
-        fig += [go.Scatter(name = names[i], x = x, y = trace, mode = "lines")]
+        fig += [go.Scatter(name = names[i], x = x, y = trace, mode = "lines", line = dict(dash = dash[i]))]
     pyo.plot(fig, filename = title + '.html')
     
 def plot_hyperparameters(results, goal_vars, hyper_params):

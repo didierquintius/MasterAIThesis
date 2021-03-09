@@ -7,82 +7,20 @@ Created on Mon Jan 18 21:41:00 2021
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from copy import copy
+
+from datetime import date
 import re, os, pickle
-import matplotlib.pyplot as plt
+
 from tqdm import tqdm
 from time import time
-from statsmodels.stats import weightstats as stests
+from BayesianTuningFunctions import *
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from BrainAreaFunctions import train_brain_area
 
-def updateBetaValues(beta_values):
-    plotBetaValues(beta_values, save = False)
-    for param, param_values in beta_values.items():
-        
-        top_param_value = min(param_values, key = lambda x: param_values[x][0] / param_values[x][1])
-        alpha, beta = param_values[top_param_value]
-        np.random.seed(0)
-        top_dist_values = np.random.beta(alpha, beta, int(alpha + beta))
-        iter_values = copy(list(param_values.values()))
-        param_value_names = list(param_values.keys())
-
-        for i, values in enumerate(iter_values):
-            alpha, beta = values
-            np.random.seed(0)
-            dist_values = np.random.beta(alpha, beta, int(alpha + beta))
-            pvalue = stests.ztest(top_dist_values, dist_values, value=0,alternative='two-sided')[1]
-            if pvalue < 1e-10:
-                del beta_values[param][param_value_names[i]]
-    plotBetaValues(beta_values, save = False)
-    return beta_values   
-
-def generate_prob(param, value, beta_values):
-    alpha, beta = beta_values[param][value]
-    return np.random.beta(alpha, beta)
-
-def generate_params(beta_values):
-    chosen_param_values = {}
-    for param, param_values in beta_values.items():
-        param_values = list(param_values.keys())
-        probs = [generate_prob(param, value, beta_values) for value in param_values]
-        chosen_param_values[param] = param_values[np.argmin(probs)]
-    return chosen_param_values
-
-
-def update_beta_values(output1, output2, param_values, run, beta_values):
-    for param, value in param_values.items():
-        if bool(re.match(pred_regex, param)): output = output1
-        else: output = output2
-        alpha, beta = beta_values[param][value]
-        if output > 0.5: output= 0.5
-        beta_values[param][value] = (alpha + output * (1 * run / runs), beta + 1 - output * (1 + run / runs))
-    return beta_values
-
-def initiateBetaValues(params):
-    beta_values = {}
-    for param, param_values in params.items():
-        beta_values[param] = {}
-        for value in param_values:
-            beta_values[param][value] = (np.finfo('float').tiny, 1)
-    return beta_values
-
-def plotBetaValues(beta_values, comb = [[]], save = True):
-    for param, param_values in beta_values.items():
-        dist_values =pd.DataFrame([])
-        for param_value, alpha_beta in param_values.items():
-            alpha, beta = alpha_beta
-            dist_values[param_value] = np.random.beta(alpha, beta, 10000)
-        
-        dist_values = dist_values.melt()
-        plot = sns.displot(dist_values, x="value", hue="variable", kind="kde", fill=True, palette = sns.color_palette("hls", len(param_values)))
-        plot.set(title = param)
-        if save: plt.savefig('./Plots/' + param + '_' + str(comb[0][0]) + '_' + str(comb[1][0]) + '_' + str(comb[2][0]) + '_' + str(brain_area) + ".png")
 
 #%%
 # list all  fixed hyper parameters with their possible values
-fixed_params = dict(time_steps = [100],
+fixed_params = dict(time_steps = [40],
                 trials = [100],
                 brain_areas = [100])
 # list all other hyper parameters
@@ -102,16 +40,11 @@ params = dict(nodes_pred = np.arange(50,200,25).tolist(),
                 val_freq_pred = [25, 50, 100],
                 val_freq_clas = [2, 5, 10],
                 EPOCHS_pred = np.arange(20, 40, 2).tolist(),
-                EPOCHS_clas = np.arange(20, 40, 2).tolist())#,
-                #CNN_structure = ["1", "n"],
-                #Smoothing = ['True', 'False'],
-                #TrainWithNoisySources_pred = ['True', 'False'],
-                #val_perc = [0.1, 0.2, 0.05],
-                #test_trials = [50, 100, 200])
+                EPOCHS_clas = np.arange(20, 40, 2).tolist())
 #%%
 runs = 500
 fixed_comb = [[]]
-pred_regex = re.compile('.+_pred')
+
 
 # generate all possible combinations of fixed hyper parameters  
 for param, param_values in fixed_params.items():
@@ -121,6 +54,7 @@ results = pd.DataFrame([], columns = list(params.keys()) + list(fixed_params.key
 #%%
 for brain_area in [0]:
     for comb in fixed_comb:
+        results_folder = './results_' + str(date.today().day) + str(date.today().month) + str(int(time()))
         params['time_steps'], params['trials'], params['brain_areas'] = tuple(comb)
           
         # generate starting alpha and beta parameters for each value
@@ -131,12 +65,12 @@ for brain_area in [0]:
             start = time()
             output = train_brain_area(brain_area, param_values)
             results.loc[len(results)] = list(param_values.values()) + list(output) + [time() - start] + [brain_area]
-            beta_values = update_beta_values(output[0], 1 - output[2], param_values, run, beta_values)
-            pickle.dump(results, open('./results.pkl', 'wb'))
-            pickle.dump(beta_values, open('./beta'+ str(brain_area) +'.pkl', 'wb'))
+            beta_values = update_beta_values(output[0], 1 - output[2], param_values, run, beta_values, runs)
+            pickle.dump(results, open(results_folder + './results.pkl', 'wb'))
+            pickle.dump(beta_values, open(results_folder + './beta'+ str(brain_area) +'.pkl', 'wb'))
             if (run > 250) & ((run % 50) == 0):
                 beta_values = updateBetaValues(beta_values)
         
-        plotBetaValues(beta_values, comb)
+        plotBetaValues(beta_values, brain_area, comb, results_folder = results_folder)
             
     

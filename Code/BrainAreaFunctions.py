@@ -6,17 +6,18 @@ Created on Thu Jan 21 08:40:23 2021
 """
 
 from DataSimulation_functions import Balanced_EEG
-from DataSplit_functions import filterCorrespondingData
 import torch
+from time import time
 import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 from NeuralNetwork_functions import NeuralNet, CNN
 from Fit_functions import Validation, createBatches, updateNet
+from Visualize_functions import plot_line
 
 #%%
 
-def train_brain_area(brain_area, param_values, val_perc = 0.1):
+def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False):
      
     def setNNFormat(data, nn_input):
         data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
@@ -46,6 +47,8 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1):
         loss_function = nn.MSELoss()
         Validator = Validation(param_values['max_val_amount_pred'], param_values["val_treshold_pred"], loss_function, X_val, y_val)
         batches = createBatches(np.arange(X_train.shape[0]), param_values['batch_sizes_pred'])
+        
+        
         for epoch in range(param_values['EPOCHS_pred']):
             for i, batch in enumerate(batches):        
                 updateNet(Net, X_train, y_train, batch, loss_function, optimizer)        
@@ -53,19 +56,13 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1):
                     Net, STOP = Validator.update(Net)  
                     if STOP != "": 
                         train_performance = np.float(loss_function(Net(X_train), y_train))
+                        
                         return train_performance, Validator, Net, STOP
         
-        train_performance = np.float(loss_function(Net(X_train), y_train))   
+        train_performance = np.float(loss_function(Net(X_train), y_train)) 
+        
         return train_performance, Validator, Net, "Max_epochs"
-    
-    def determine_class(active_brain_areas, brain_area):
-        trials = active_brain_areas.shape[0]
-        class_trial = torch.zeros((trials, 1))
-        for trial in range(trials):
-            if brain_area in active_brain_areas[trial, :]:
-                class_trial[trial] = 1
-        return class_trial
-    
+        
     def trainClassificationModel(param_values, activity, class_trial):
         
         X_val = activity[:int(param_values['trials']* val_perc),:,:]
@@ -90,6 +87,7 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1):
                     Net, STOP = Validator.update(Net)                
                     if STOP != "": 
                         train_performance = np.float(loss_function(Net(X_train), y_train))
+                        
                         return Net, train_performance, Validator.val_losses, STOP
                         
         train_performance = np.float(loss_function(Net(X_train), y_train))   
@@ -98,44 +96,46 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1):
             
     
     # simulate data
-    EEG_Data, active_brain_areas, noisy_brain_areas, source_activity, noisy_activity = Balanced_EEG(param_values, brain_area, save_noisy=True)
+    EEG_Data, activity, source_trials, noisy_trials = Balanced_EEG(param_values, brain_area)
     electrodes, time_steps, _ = EEG_Data.shape
     
+
     # format  prediction data
     EEG_Data = setNNFormat(EEG_Data, electrodes)
-    activity, source_trials, noisy_trials = filterCorrespondingData(source_activity, active_brain_areas, noisy_activity, noisy_brain_areas, brain_area)
-    
+    activity = setNNFormat(activity, 1)
+    source_trials = setNNFormat(source_trials, 1)
     train_performance, Validator, Net, STOP = train_PredictionModel(param_values, EEG_Data, activity)
     
     # format classification data
     predicted_source_activity = Net(EEG_Data).reshape((-1, 1, time_steps))
-    class_trial= determine_class(active_brain_areas, brain_area)
     
-    CNN_Net, train_performance_clas, Validator_clas, STOP_clas = trainClassificationModel(param_values, predicted_source_activity, class_trial)
+    CNN_Net, train_performance_clas, Validator_clas, STOP_clas = trainClassificationModel(param_values, predicted_source_activity, source_trials)
     
-    EEG_Data, active_brain_areas, noisy_brain_areas, source_activity, a = Balanced_EEG(param_values, brain_area, seed = 1)
+    
+    EEG_Data, activity, source_trials, _  = Balanced_EEG(param_values, brain_area, seed = 1)
+    
     
     EEG_Data = setNNFormat(EEG_Data, electrodes)
     predicted_source_activity = Net(EEG_Data)
-    predicted_class = CNN_Net(predicted_source_activity.reshape(-1, 1, time_steps)).detach().numpy().reshape(-1, 1)
+    predicted_class = CNN_Net(predicted_source_activity.reshape(-1, 1, time_steps)).detach().numpy().reshape(-1)
+    
+    
     predicted_source_activity = predicted_source_activity.detach().numpy().reshape(-1, time_steps)
-    
-    actual_class = np.zeros((param_values['trials'], 1))
-    actual_activity = np.zeros((param_values['trials'], time_steps))
+    activity = activity.transpose()
+    mse_pred = ((activity - predicted_source_activity)**2).mean()
+    mse_clas = ((source_trials - predicted_class)**2).mean()
 
-    for trial in range(param_values['trials']): 
-        neurons = active_brain_areas[trial, :]
-        if brain_area in neurons: 
-            actual_class[trial, :] = 1
-            neural_activity = source_activity[neurons == brain_area, :, trial]
-            actual_activity[trial, :] = neural_activity
+    truepositive_clas = (predicted_class[source_trials == 1] >= 0.5).mean()
+    truenegative_clas = (predicted_class[source_trials == 0] < 0.5).mean()
 
-    
-    mse_pred = ((actual_activity - predicted_source_activity)**2).mean()
-    mse_clas = ((actual_class - predicted_class)**2).mean()
-    truepositive_clas = (predicted_class[actual_class == 1] >= 0.5).mean()
-    truenegative_clas = (predicted_class[actual_class == 0] < 0.5).mean()
-    
+    if plot:
+        activity = activity.reshape((-1))
+        predicted_source_activity = predicted_source_activity.reshape((-1))
+        plot_line([activity, predicted_source_activity],['Original','Predicted'], title = 'Prediction_Performance')
+        source_trials = np.repeat(source_trials, time_steps).reshape((-1))
+        predicted_class = np.repeat(predicted_class, time_steps).reshape((-1))
+        plot_line([predicted_source_activity, source_trials, predicted_class],['Predicted Activity', 'Original State', 'Predicted State'], dash = ['solid', 'dash', 'dot'],title = 'Classification Performance')
+   
     return (mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas)
     
     
