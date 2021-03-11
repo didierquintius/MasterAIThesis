@@ -30,8 +30,8 @@ params = dict(nodes_pred = 50,
                 time_steps = 100,
                 brain_areas = 1000)
 #%%
-resultaten = pickle.load(open('./eerste_resultaten.pkl','rb'))
-for brain_area in tqdm([89]):
+#resultaten = pickle.load(open('./eerste_resultaten.pkl','rb'))
+for brain_area in [0]:
     mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas = train_brain_area(brain_area, params, plot = True)
-    resultaten.loc[brain_area] = [mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas]
-    pickle.dump(resultaten, open('./eerste_resultaten.pkl','wb'))
+    #resultaten.loc[brain_area] = [mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas]
+   # pickle.dump(resultaten, open('./eerste_resultaten.pkl','wb'))

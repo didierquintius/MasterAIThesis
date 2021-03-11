@@ -7,10 +7,8 @@ Created on Mon Jan 18 21:41:00 2021
 
 import numpy as np
 import pandas as pd
-
 from datetime import date
 import re, os, pickle
-
 from tqdm import tqdm
 from time import time
 from BayesianTuningFunctions import *
@@ -20,15 +18,15 @@ from BrainAreaFunctions import train_brain_area
 
 #%%
 # list all  fixed hyper parameters with their possible values
-fixed_params = dict(time_steps = [40],
-                trials = [100],
-                brain_areas = [100])
+fixed_params = dict(time_steps = [10],
+                trials = [10],
+                brain_areas = [1000])
 # list all other hyper parameters
 params = dict(nodes_pred = np.arange(50,200,25).tolist(),
-                nodes_Conv_clas = np.arange(10,50, 5),
-                nodes_Dense_clas = np.arange(5,30,2),
-                kernel_size = np.arange(2,10), 
-                strides = np.arange(1,4),
+                nodes_Conv_clas = np.arange(10,50, 5).tolist(),
+                nodes_Dense_clas = np.arange(5,30,2).tolist(),
+                kernel_size = np.arange(2,10).tolist(), 
+                strides = np.arange(1,4).tolist(),
                 learning_rate_pred = [5e-3,1e-4,5e-5, 1e-5,5e-6, 1e-6],
                 learning_rate_clas = [5e-3,1e-4,5e-5, 1e-5,5e-6, 1e-6],
                 batch_sizes_pred = [25, 50, 100, 200],
@@ -55,6 +53,7 @@ results = pd.DataFrame([], columns = list(params.keys()) + list(fixed_params.key
 for brain_area in [0]:
     for comb in fixed_comb:
         results_folder = './results_' + str(date.today().day) + str(date.today().month) + str(int(time()))
+        if not os.path.isdir(results_folder): os.mkdir(results_folder)
         params['time_steps'], params['trials'], params['brain_areas'] = tuple(comb)
           
         # generate starting alpha and beta parameters for each value

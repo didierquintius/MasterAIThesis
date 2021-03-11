@@ -10,19 +10,21 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.stats import weightstats as stests
 import numpy as np
-import re
+import re, os
 
 def plotBetaValues(beta_values, brain_area, comb = [[]], save = True, results_folder = ''):
-        for param, param_values in beta_values.items():
-            dist_values =pd.DataFrame([])
-            for param_value, alpha_beta in param_values.items():
-                alpha, beta = alpha_beta
-                dist_values[param_value] = np.random.beta(alpha, beta, 10000)
-            
-            dist_values = dist_values.melt()
-            plot = sns.displot(dist_values, x="value", hue="variable", kind="kde", fill=True, palette = sns.color_palette("hls", len(param_values)))
-            plot.set(title = param)
-            if save: plt.savefig(results_folder + './Plots/' + param + '_' + str(comb[0][0]) + '_' + str(comb[1][0]) + '_' + str(comb[2][0]) + '_' + str(brain_area) + ".png")
+    if not os.path.isdir(results_folder + '/Plots/'):
+        os.mkdir(results_folder + '/Plots/')
+    for param, param_values in beta_values.items():
+        dist_values =pd.DataFrame([])
+        for param_value, alpha_beta in param_values.items():
+            alpha, beta = alpha_beta
+            dist_values[param_value] = np.random.beta(alpha, beta, 10000)
+        
+        dist_values = dist_values.melt()
+        plot = sns.displot(dist_values, x="value", hue="variable", kind="kde", fill=True, palette = sns.color_palette("hls", len(param_values)))
+        plot.set(title = param)
+        if save: plt.savefig(results_folder + '/Plots/' + param + '_' + str(comb[0][0]) + '_' + str(comb[1][0]) + '_' + str(comb[2][0]) + '_' + str(brain_area) + ".png")
 
 def updateBetaValues(beta_values):
     

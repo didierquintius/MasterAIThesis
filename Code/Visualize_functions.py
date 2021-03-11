@@ -4,7 +4,7 @@ Created on Sat Sep 26 11:18:36 2020
 
 @author: didie
 """
-import random
+import random, pickle, os
 import numpy as np
 import plotly.offline as pyo
 import plotly.graph_objs as go
@@ -29,9 +29,21 @@ def plot_hyperparameters(results, goal_vars, hyper_params):
             pyo.plot(fig, filename = param + "_" + goal_var +'.html')
             fig.write_image(param + "_" + goal_var +'.png')
 
-def plot_results(result):
-    plot_hyperparameters(result, ['mean_train_pred', "time"], ["pred_arch","proportion_pred",'lr_pred', 'batch_pred', 'val_treshold_pred'])
-    plot_hyperparameters(result, ['mean_train_clas', "time"], ["nodes_CNN",'nodes_Dense', "kernel", "stride", "lr_clas", "proportion_clas",'batch_clas', 'val_treshold_clas'])
+def plot_dipoles(dipoles, color_dipoles):
+    coordinates = pickle.load(open(os.environ['DATA'] + '\\MasterAIThesis\\llocation_neurons.pkl', 'rb'))
+    coordinates = coordinates[range(0,coordinates.shape[0], int(coordinates.shape[0]/999)),:][:1000,:]
+    dipole_coord = coordinates[dipoles, :]
+    pyo.plot([go.Scatter3d(x = coordinates[:,0], y = coordinates[:,1], z = coordinates[:, 2],
+                      mode = 'markers',
+                      marker_symbol = 'circle-open',
+                      marker= dict(size = 5, color = 'black')),
+              go.Scatter3d(x = dipole_coord[:,0], y = dipole_coord[:,1], z = dipole_coord[:, 2],
+                      mode = 'markers',
+                      marker_symbol = 'circle',
+                      marker= dict(size = 5, color = color_dipoles))])
+    
+
+
 #%%
 
 

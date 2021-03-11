@@ -7,7 +7,6 @@ Created on Thu Jan 21 08:40:23 2021
 
 from DataSimulation_functions import Balanced_EEG
 import torch
-from time import time
 import numpy as np
 import torch.optim as optim
 import torch.nn as nn
@@ -88,11 +87,11 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False):
                     if STOP != "": 
                         train_performance = np.float(loss_function(Net(X_train), y_train))
                         
-                        return Net, train_performance, Validator.val_losses, STOP
+                        return Net, train_performance, Validator, STOP
                         
         train_performance = np.float(loss_function(Net(X_train), y_train))   
           
-        return Net, train_performance, Validator.val_losses, "Max Epochs"  
+        return Net, train_performance, Validator, "Max Epochs"  
             
     
     # simulate data
@@ -135,7 +134,8 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False):
         source_trials = np.repeat(source_trials, time_steps).reshape((-1))
         predicted_class = np.repeat(predicted_class, time_steps).reshape((-1))
         plot_line([predicted_source_activity, source_trials, predicted_class],['Predicted Activity', 'Original State', 'Predicted State'], dash = ['solid', 'dash', 'dot'],title = 'Classification Performance')
-   
+        plot_line([np.array(Validator.val_losses)], ['Prediction Validation Loss'], title = 'Prediction Validation Loss')
+        plot_line([np.array(Validator_clas.val_losses)], ['Classification Validation Loss'], title = 'Classification Validation Loss')
     return (mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas)
     
     
