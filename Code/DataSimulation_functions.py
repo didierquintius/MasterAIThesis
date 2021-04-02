@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri May 29 17:36:54 2020
+Created on Mon Mar 15 09:54:13 2021
 
 @author: didie
 """
@@ -10,36 +10,41 @@ import numpy as np
 import torch
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 #%%
+def setNNFormat(data, nn_input):
+    # reshape data to the correct input shape for the neural network
+    data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
+    return data
 
+def generate(seed, time_steps, trials, n_source_sources = 3):
+    # generates neural activity for n sources for a given number of timesteps and trials
 
-def generate(seed, time_steps, trials, no_active_sources = 3):
-    # generates activitactivity for n sources for a given number of timesteps and trials
-    
     np.random.seed(seed)
-    activity = np.zeros((no_active_sources, time_steps,trials))
+    activity = np.zeros((n_source_sources, time_steps,trials))
     # set every first time step to zero and every second time step to 1
     activity[:,1,:] = 1
     parameters = np.zeros((3,3,2))
-    # set parameters for 
+    # set parameters for the AR process
     parameters[0,:,:] = [[0.5, -0.7],[0, 0],[0, 0]]
     parameters[1,:,:] = [[0.2, 0],[0.7, -0.5],[0, 0]]
     parameters[2,:,:] = [[0, 0],[0, 0],[0, 0.8]]
+    
     for trial in range(trials):
         for time_step in range(2, time_steps):
+            # the size of two parameters are depended on the timesteps and are
+            # calculated using the if statements
             if time_step < time_steps / 2:
-                parameters[0,1,0] = 0.5 * (time_step/ time_steps)
+                parameters[0,1,0] = 0.5 * (time_step / time_steps)
             else:
                 parameters[0,1,0] = 0.5* (time_steps - time_step) / (time_steps / 2)
             
             parameters[1,2,0] = 0.4 if time_step < 0.7 * time_steps else 0
             
             # multiply the previous values of the brain activity with the parameters
-            # add random noise to obtain new values of the brain acitivy
+            # add random noise (between -0.5 and 0.5) to obtain new values of the brain acitivy
             activity[:, time_step, trial] = np.einsum('ijk,jk', parameters, activity[:,[time_step-1,time_step-2],trial]) + np.random.random(3) - 0.5
    
-    return activity         
+    return activity       
 
-#%%
 def pink_noise(n, m):
     n1 = n + 1 if n % 2 == 0 else n
     mid_point = int((n1 - 1) / 2)
@@ -57,67 +62,7 @@ def pink_noise(n, m):
 def standardize(x):
     return (x - x.mean())/x.std()
 
-def EEG_signal(time_steps,trials,no_brain_areas, sig_noise_ratio , channel_noise_ratio,
-                noise_sources, seed = 0, only_save = False):
-    
-    # load projection matrix and subset to the relevant brain areas
-    projection_matrix = pickle.load(open( os.environ['DATA'] + "/MasterAIThesis/projection_matrix.pkl", "rb" ))
-    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
-                                                   int(projection_matrix.shape[1]/(no_brain_areas - 1)))]
-
-    # determine which brain areas will be active during each trial
-    sample_list = np.arange(no_brain_areas).tolist()
-    active_brain_areas = []
-    noisy_brain_areas = []
-    # each brain area is active part 1 equal amount of times
-    # the other two active no_brain_areas are chosen randomly
-    for neuron in range(no_brain_areas):
-        temp_sample_list = sample_list.copy()
-        temp_sample_list.remove(neuron)
-        amount = int(trials/no_brain_areas * (neuron + 1)) - int(trials/no_brain_areas * neuron)
-        active_brain_areas = active_brain_areas + [[neuron] + random.sample(temp_sample_list, 2) for i in range(amount)]
-    no_electrodes = projection_matrix.shape[0]
-    EEG_Data = np.zeros((no_electrodes, time_steps, trials))
-    activity = generate(seed, time_steps, trials)
-    
-    for trial in range(trials):
-        
-        noisy_activity = standardize(pink_noise(time_steps, noise_sources))
-        source_activity_trial = standardize(activity[:,:,trial])
-        noisy_elements = np.random.choice(no_brain_areas, noise_sources, replace = False)
-        noisy_brain_areas +=  [noisy_elements]
-        
-        EEG_activity = projection_matrix[:, active_brain_areas[trial]] @ source_activity_trial
-        EEG_noisy = projection_matrix[:, noisy_elements] @ noisy_activity
-        EEG_signal = standardize(sig_noise_ratio * EEG_activity + (1 - sig_noise_ratio) * EEG_noisy)
-        EEG_channel_noise = np.random.normal(size = (no_electrodes, time_steps))
-        
-        EEG_Data[:,:,trial] = channel_noise_ratio * EEG_signal + (1 - channel_noise_ratio) * EEG_channel_noise
-        activity[:,:,trial] = source_activity_trial
-    
-    active_brain_areas = np.array(active_brain_areas)
-    noisy_brain_areas = np.array(noisy_brain_areas)
-    shuffled_indexes = np.arange(trials).tolist()
-    random.shuffle(shuffled_indexes)
-    EEG_Data = EEG_Data[:,:,shuffled_indexes]
-    activity = activity[:,:,shuffled_indexes]
-    active_brain_areas = active_brain_areas[shuffled_indexes, :]
-    noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
-    data = (EEG_Data, active_brain_areas, noisy_brain_areas, activity)
-    pickle.dump(data, open(os.environ['DATA'] + "/MasterAIThesis/EEG/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(noise_sources) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials)+ ".pkl", "wb" ))
-    
-    if not only_save:
-        return data
-    
-
-
-def Balanced_EEG(params, relevant_brain_area, sig_noise_ratio = 0.9, channel_noise_ratio = 0.9, seed = 0, only_save = False):
-    time_steps,trials,no_brain_areas, noise_sources = params['time_steps'], params['trials'], params['brain_areas'], int(0.5 * params['brain_areas'])
-    file_name = os.environ['DATA'] + "/MasterAIThesis/Training/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(no_brain_areas) + "_" + str(time_steps) + "_" + str(trials) + "_" + str(relevant_brain_area) + "_" + str(seed) + ".pkl"
-    if os.path.isfile(file_name):
-        return pickle.load(open(file_name, "rb"))
-    
-    def filterCorrespondingData(source_activity, source_dipoles, noisy_activity, noisy_dipoles, rel_dipole):
+def filterCorrespondingData(source_activity, source_dipoles, noisy_activity, noisy_dipoles, rel_dipole):
         def setNNFormat(data, nn_input):
             data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
             return data
@@ -134,73 +79,193 @@ def Balanced_EEG(params, relevant_brain_area, sig_noise_ratio = 0.9, channel_noi
         activity = source_activity + noisy_activity
     
         return activity, source_trials, noisy_trials
-        
     
-    def active_areas(trial):
-        if trial < int(trials / 9):
-            return [relevant_brain_area] + random.sample(non_relevant_brain_areas, 2)
-        elif trial < int(trials * 2 / 9):
-            samples = random.sample(non_relevant_brain_areas, 2)
-            return [samples[0]] + [relevant_brain_area] + [samples[1]]
-        elif trial < int(trials / 3):
-            return random.sample(non_relevant_brain_areas, 2) + [relevant_brain_area] 
-        else:
-            return random.sample(non_relevant_brain_areas, 3)
+def source_areas(trial, trials, non_relevant_dipoles, relevant_dipole):
+    if trial < int(trials / 9):
+        return [relevant_dipole] + random.sample(non_relevant_dipoles, 2)
+    elif trial < int(trials * 2 / 9):
+        samples = random.sample(non_relevant_dipoles, 2)
+        return [samples[0]] + [relevant_dipole] + [samples[1]]
+    elif trial < int(trials / 3):
+        return random.sample(non_relevant_dipoles, 2) + [relevant_dipole] 
+    else:
+        return random.sample(non_relevant_dipoles, 3)
+
+def train_active_dipoles(trials, n_relevant_dipoles, train_dipole):
+    # select 3 dipoles as active during each trials, ensure equal presentation
+    # by generating a random order of the dipoles and reshaping this in
+    # triplets, when the trials are more than the number of relevant dipoles
+    # repeat the process
+    
+    non_train_dipoles = np.delete(np.arange(n_relevant_dipoles), train_dipole)
+    active_trials = int(trials / 3)
+    other_trials = trials - active_trials
+    n_non_train = len(non_train_dipoles)
+    
+    # the amount of dipole states that need to be determined
+    dipole_selections_active = active_trials * 2
+    dipole_selections_other = other_trials * 3
+    
+    # calculate amount of dipoles that can simulated simultaneously
+    max_permutation_size_active = n_non_train - n_non_train % 2
+    max_permutation_size_other  = n_non_train - n_non_train % 3
+    
+    # split trials up into batches of the maximum size of each iteration
+    permutation_sizes_active = [max_permutation_size_active] * int(dipole_selections_active / max_permutation_size_active)
+    permutation_sizes_active += [dipole_selections_active% max_permutation_size_active]
+    
+    permutation_sizes_other = [max_permutation_size_other] * int(dipole_selections_other / max_permutation_size_other)
+    permutation_sizes_other += [dipole_selections_other % max_permutation_size_other]
+    
+    # select which dipoles are the source during each trial
+    source_dipoles = np.array([]).reshape((-1, 3))
+    for size in permutation_sizes_other:
+        new_source_dipoles = np.random.permutation(non_train_dipoles[:size])
+        source_dipoles = np.append(source_dipoles,new_source_dipoles.reshape((-1, 3)), axis = 0).reshape((-1, 3))
+
+    active_source_dipoles = np.ones((active_trials, 3)).astype('int') * -1
+    active_source_dipoles[:int(active_trials/3),0] = train_dipole
+    active_source_dipoles[int(active_trials/3):int(active_trials*2/3),1] = train_dipole
+    active_source_dipoles[int(active_trials*2/3):, 2] = train_dipole
+    empty_coord = np.where(active_source_dipoles == -1)
+    
+    for size in permutation_sizes_active:
+        new_source_dipoles = np.random.permutation(non_train_dipoles[:size])
+        empty_coord = np.where(active_source_dipoles == -1)
+        relevant_coord = (empty_coord[0][:size], empty_coord[1][:size])
+        active_source_dipoles[relevant_coord] = new_source_dipoles
+    
+
+    source_dipoles = np.append(source_dipoles, active_source_dipoles, axis = 0)
+    shuffled_indexes = np.random.permutation(trials)
+    source_dipoles = source_dipoles[shuffled_indexes, :].astype('int')
+    source_dipoles = source_dipoles.tolist()
+
+    return source_dipoles
+
+def standard_active_dipoles(trials, n_relevant_dipoles):
+    # select 3 dipoles as active during each trials, ensure equal presentation
+    # by generating a random order of the dipoles and reshaping this in
+    # triplets, when the trials are more than the number of relevant dipoles
+    # repeat the process
+    
+    # the amount of dipole states that need to be determined
+    dipole_selections = trials * 3
+    
+    # calculate amount of dipoles that can simulated simultaneously
+    max_permutation_size = n_relevant_dipoles - (n_relevant_dipoles % 3)
+    
+    # split trials up into batches of the maximum size of each iteration
+    permutation_sizes = [max_permutation_size] * int(dipole_selections / max_permutation_size)
+    
+    # add leftover dipole selections
+    permutation_sizes += [(dipole_selections) % max_permutation_size]
+    
+    # select which dipoles are the source during each trial
+    source_dipoles = []
+    for size in permutation_sizes:
+        new_source_dipoles = np.random.permutation(n_relevant_dipoles)[:size]
+        source_dipoles += new_source_dipoles.reshape((-1, 3)).tolist()
+    return source_dipoles
+
+def close_active_dipoles(trials, n_relevant_dipoles = 1000):
+    
+    distances = pickle.load(open(os.environ['DATA'] + '\\MasterAIThesis\\dipole_distances.pkl', 'rb'))
+    close_dipoles = []
+    for dipole in range(1000):
+        close_dipoles += [np.where(distances[dipole,:] < 20)[0].tolist()]
+    source_dipoles = []
+    for trial in range(trials):
+        random.seed(int(trial / n_relevant_dipoles))
+        dipole = trial % n_relevant_dipoles
+        source_dipoles += [[dipole] + random.sample(close_dipoles[dipole], 2)]
+    return source_dipoles
+def simulateTrialData(source_dipoles, source_activity, params , projection_matrix,
+                      sig_noise_ratio, channel_noise_ratio):
+
+    time_steps, n_relevant_dipoles, n_noise_dipoles = params['time_steps'], params['brain_areas'], int(0.5 * params['brain_areas'])
+    n_electrodes = projection_matrix.shape[0]
+    # sample the noisy dipoles from the remaining not source dipoles
+    non_source_dipoles = np.delete(np.arange(n_relevant_dipoles), source_dipoles).tolist()
+    noisy_dipoles = random.sample(non_source_dipoles, n_noise_dipoles)  
+          
+    # generate noisy activity
+    noisy_activity = pink_noise(time_steps, n_noise_dipoles)
+          
+    # project the neural activity to the scalp
+    EEG_source = projection_matrix[:, source_dipoles] @ source_activity
+    EEG_noisy =  projection_matrix[:, noisy_dipoles]  @ noisy_activity
+    
+    # standerdize neural activity before and after sum to ensure accurate ratio
+    EEG_source = standardize(EEG_source)
+    EEG_noisy =  standardize(EEG_noisy)
+    EEG_signal_pure = standardize(sig_noise_ratio * EEG_source + (1 - sig_noise_ratio) * EEG_noisy)
+    
+    # add channel noise over the pure EEG signal
+    EEG_channel_noise = np.random.normal(size = (n_electrodes, time_steps))
+    EEG_signal = channel_noise_ratio * EEG_signal_pure + (1 - channel_noise_ratio) * EEG_channel_noise
+    
+    return EEG_signal, noisy_activity, noisy_dipoles  
+                 
+def simulateData(params, simulation, train_dipole = None, sig_noise_ratio = 0.9, channel_noise_ratio = 0.9, seed = 0, only_save = False):
+    # get parameters
+    time_steps,trials,n_relevant_dipoles = params['time_steps'], params['trials'], params['brain_areas']
+    
+    # check if there already exist a dataset with the same specifications
+    if simulation == 'train':
+        file_name = os.environ['DATA'] + "/MasterAIThesis/Training/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(n_relevant_dipoles) + "_" + str(time_steps) + "_" + str(trials) + "_" + str(simulation) + "_" + str(train_dipole) + '_' + str(seed) + ".pkl"
+    else:
+        file_name = os.environ['DATA'] + "/MasterAIThesis/Training/data_" + str(sig_noise_ratio) + "_" + str(channel_noise_ratio) + "_" + str(n_relevant_dipoles) + "_" + str(time_steps) + "_" + str(trials) + "_" + str(simulation) + "_" + str(seed) + ".pkl"
+    
+    if os.path.isfile(file_name):
+        return pickle.load(open(file_name, "rb"))
     
     # load projection matrix and subset to the relevant brain areas
     projection_matrix = pickle.load(open( os.environ['DATA'] + "/MasterAIThesis/projection_matrix.pkl", "rb" ))
-    projection_matrix = projection_matrix[:, range(0,projection_matrix.shape[1],
-                                                   int(projection_matrix.shape[1]/(no_brain_areas - 1) - 1))]
+    n_electrodes, total_dipoles = projection_matrix.shape
+    relevant_dipoles = range(0,total_dipoles, int(total_dipoles/(n_relevant_dipoles - 1) - 1))[:n_relevant_dipoles]
+    projection_matrix = projection_matrix[:, relevant_dipoles]
     
+    if simulation == 'standard': 
+        source_dipoles = standard_active_dipoles(trials, n_relevant_dipoles)
+    elif simulation == 'train':
+        source_dipoles = train_active_dipoles(trials, n_relevant_dipoles, train_dipole)
+    elif simulation == 'close':
+        source_dipoles = close_active_dipoles(trials)
+    else:
+        print('simulation strategy not available')
+        return
 
-    active_brain_areas = []
-    noisy_brain_areas = []
-    non_relevant_brain_areas = np.delete(np.arange(no_brain_areas), relevant_brain_area).tolist()
-    
-    no_electrodes, _ = projection_matrix.shape
-    EEG_Data = np.zeros((no_electrodes, time_steps, trials))
+    EEG_Data = np.zeros((n_electrodes, time_steps, trials))
     source_activity = generate(seed, time_steps, trials)
-    noisy_activity = np.zeros((noise_sources,time_steps, trials))
-
+    noisy_dipoles = []
+    activity = np.zeros((n_relevant_dipoles, trials, time_steps))
     for trial in range(trials):
-        active_sources =  active_areas(trial)
-        active_brain_areas += [active_sources]
+        EEG_signal, noisy_activity_trial, noisy_dipoles_trial = simulateTrialData(source_dipoles[trial], source_activity[:, :, trial], params, 
+                                                                                  projection_matrix, sig_noise_ratio, channel_noise_ratio)
+        # add trial data to total data set
+        EEG_Data[:,:,trial] = EEG_signal
+        noisy_dipoles += [noisy_dipoles_trial]    
+        
+        activity[source_dipoles[trial], trial, :] = source_activity[:, :, trial]
+        activity[noisy_dipoles_trial,   trial, :] = noisy_activity_trial
 
-        non_actives = np.delete(np.arange(no_brain_areas), active_sources).tolist()
-        noisy_sources = random.sample(non_actives, noise_sources)  
-        noisy_brain_areas += [noisy_sources]
+           
+    if simulation == 'train':
+        activity = activity[train_dipole, :, :]
+        source_dipoles = [train_dipole in sources for sources in source_dipoles]
+        noisy_dipoles = [train_dipole in noises for noises in noisy_dipoles]
         
-        noisy_activity_trial = standardize(pink_noise(time_steps, noise_sources))
-        source_activity_trial = standardize(source_activity[:,:,trial])
-        
-        EEG_activity = projection_matrix[:, active_sources] @ source_activity_trial
-        EEG_noisy =    projection_matrix[:, noisy_sources]  @ noisy_activity_trial
-        
-        EEG_channel_noise = np.random.normal(size = (no_electrodes, time_steps))
-        
-        EEG_signal = standardize(sig_noise_ratio * EEG_activity + (1 - sig_noise_ratio) * EEG_noisy)
-
-        EEG_Data[:,:,trial] = channel_noise_ratio * EEG_signal + (1 - channel_noise_ratio) * EEG_channel_noise
-        source_activity[:,:,trial] = source_activity_trial
-        noisy_activity[:,:,trial]= noisy_activity_trial
-        
+    source_dipoles = np.array(source_dipoles)
+    noisy_dipoles = np.array(noisy_dipoles)
     
-    active_brain_areas = np.array(active_brain_areas)
-    noisy_brain_areas = np.array(noisy_brain_areas)
-    shuffled_indexes = np.arange(trials).tolist()
-    random.shuffle(shuffled_indexes)
+    # fit all the EEG and activity data between -1 and 1
     eeg_max = max([-EEG_Data.min(), EEG_Data.max()])
-    EEG_Data = EEG_Data[:,:,shuffled_indexes] / eeg_max
-    source_activity = source_activity[:,:,shuffled_indexes]
-    noisy_activity =  noisy_activity[:,:,shuffled_indexes]
-    active_brain_areas = active_brain_areas[shuffled_indexes, :]
-    noisy_brain_areas = noisy_brain_areas[shuffled_indexes, :]
-    activity, source_trials, noisy_trials = filterCorrespondingData(source_activity, active_brain_areas, noisy_activity, noisy_brain_areas, relevant_brain_area)
+    EEG_Data = EEG_Data / eeg_max
+
     activity_max = max([activity.max(), -activity.min()])
     activity = activity / activity_max
-    data = (EEG_Data, activity, source_trials, noisy_trials)
+    
+    data = (EEG_Data, activity, source_dipoles, noisy_dipoles)
     pickle.dump(data, open(file_name, "wb" ))
     return data
-
-    
-

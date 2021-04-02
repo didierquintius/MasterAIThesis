@@ -5,24 +5,17 @@ Created on Thu Jan 21 08:40:23 2021
 @author: Quintius
 """
 
-from DataSimulation_functions import Balanced_EEG
-import torch
+from DataSimulation_functions import simulateData
 import numpy as np
-import torch.optim as optim
-import torch.nn as nn
-from NeuralNetwork_functions import NeuralNet, CNN
-from Fit_functions import Validation, createBatches, updateNet
 from Visualize_functions import plot_line
+from NeuralNetworks import NN, CNN
+from sklearn.model_selection import train_test_split
+from keras.callbacks import EarlyStopping
 
 #%%
 
-def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False):
+def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False, add_networks = False):
      
-    def setNNFormat(data, nn_input):
-        data = torch.Tensor(data.reshape((nn_input, -1),order = "F").transpose())
-        return data
-            
-    # train neural network
     def train_PredictionModel(param_values, EEG_Data, source_activity):
         
         electrodes = EEG_Data.shape[1]
@@ -32,111 +25,84 @@ def train_brain_area(brain_area, param_values, val_perc = 0.1, plot = False):
         EEG_Data = EEG_Data[shuffled_indexes, :]
         source_activity = source_activity[shuffled_indexes, :]
         
-        data_elements  = EEG_Data.shape[0] 
         
         #split data into validation and training sets
-        X_val = EEG_Data[:int(data_elements* val_perc),:]
-        y_val = source_activity[:int(data_elements* val_perc),:]
-        X_train = EEG_Data[int(data_elements* val_perc):,:]
-        y_train = source_activity[int(data_elements* val_perc):,:]
+        X_train,X_val,y_train,y_val = train_test_split(EEG_Data,source_activity,test_size = val_perc)
         
         # initialize Neuralnetwork and relevant parameters
-        Net = NeuralNet(electrodes, [param_values['nodes_pred']], 1)
-        optimizer = optim.Adam(Net.parameters(), lr =  param_values['learning_rate_pred'])
-        loss_function = nn.MSELoss()
-        Validator = Validation(param_values['max_val_amount_pred'], param_values["val_treshold_pred"], loss_function, X_val, y_val)
-        batches = createBatches(np.arange(X_train.shape[0]), param_values['batch_sizes_pred'])
+        Net = NN(electrodes, param_values['nodes_pred'], 1)
         
+        Net.compile(loss = 'mse', optimizer = 'adam', metrics = ['mse'])
+        es = EarlyStopping(monitor='val_loss', mode='min', patience=5)
+        history = Net.fit(X_train,y_train, epochs=param_values['EPOCHS_pred'], batch_size=param_values['batch_sizes_pred'],
+                validation_data=(X_val, y_val), callbacks = [es], verbose = 0)
         
-        for epoch in range(param_values['EPOCHS_pred']):
-            for i, batch in enumerate(batches):        
-                updateNet(Net, X_train, y_train, batch, loss_function, optimizer)        
-                if (i % param_values['val_freq_pred']) == 0:
-                    Net, STOP = Validator.update(Net)  
-                    if STOP != "": 
-                        train_performance = np.float(loss_function(Net(X_train), y_train))
-                        
-                        return train_performance, Validator, Net, STOP
-        
-        train_performance = np.float(loss_function(Net(X_train), y_train)) 
-        
-        return train_performance, Validator, Net, "Max_epochs"
+        return Net, history
         
     def trainClassificationModel(param_values, activity, class_trial):
+       
+        #split data into validation and training sets
+        X_train,X_val,y_train,y_val = train_test_split(activity, class_trial,test_size = val_perc)
+
+        Net = CNN(param_values['time_steps'], param_values['nodes_Conv_clas'], param_values['nodes_Dense_clas'],
+                  param_values['kernel_size'], param_values['strides'], 1)
+        Net.compile(optimizer = 'adam',  loss='binary_crossentropy',  metrics=['accuracy','mse'])
+        es = EarlyStopping(monitor='val_loss', mode='min', verbose=0, patience=5)
+        history = Net.fit(X_train,y_train, epochs=param_values['EPOCHS_clas'], batch_size=param_values['batch_sizes_clas'],
+                validation_data=(X_val, y_val), callbacks = [es], verbose = 0)
         
-        X_val = activity[:int(param_values['trials']* val_perc),:,:]
-        y_val = class_trial[:int(param_values['trials']* val_perc),:]
-        X_train = activity[int(param_values['trials']* val_perc):,:,:]
-        y_train = class_trial[int(param_values['trials']* val_perc):,:]
-        
-        Net = CNN(param_values['time_steps'], [param_values['nodes_Conv_clas'], param_values['nodes_Dense_clas']],
-                  [param_values['kernel_size']], [param_values['strides']])
-    
-        optimizer = optim.Adam(Net.parameters(), lr =  param_values['learning_rate_clas'])
-    
-        loss_function = nn.BCELoss()
-        
-        Validator = Validation(param_values['max_val_amount_clas'], param_values["val_treshold_clas"], loss_function, X_val, y_val)
-        batches = createBatches(np.arange(X_train.shape[0]), param_values['batch_sizes_clas'])
-        
-        for epoch in range(param_values['EPOCHS_clas']):
-            for i, batch in enumerate(batches):
-                updateNet(Net, X_train, y_train, batch, loss_function, optimizer)                
-                if (i % param_values['val_freq_clas']) == 0: 
-                    Net, STOP = Validator.update(Net)                
-                    if STOP != "": 
-                        train_performance = np.float(loss_function(Net(X_train), y_train))
-                        
-                        return Net, train_performance, Validator, STOP
-                        
-        train_performance = np.float(loss_function(Net(X_train), y_train))   
-          
-        return Net, train_performance, Validator, "Max Epochs"  
+        return Net, history 
             
     
     # simulate data
-    EEG_Data, activity, source_trials, noisy_trials = Balanced_EEG(param_values, brain_area)
+    EEG_Data, activity, source_trials, noisy_trials = simulateData(param_values,'train',train_dipole= brain_area)
     electrodes, time_steps, _ = EEG_Data.shape
     
 
     # format  prediction data
-    EEG_Data = setNNFormat(EEG_Data, electrodes)
-    activity = setNNFormat(activity, 1)
-    source_trials = setNNFormat(source_trials, 1)
-    train_performance, Validator, Net, STOP = train_PredictionModel(param_values, EEG_Data, activity)
+    EEG_Data = EEG_Data.transpose().reshape(-1, electrodes)
+    activity = activity.reshape(-1, 1)
+    source_trials = source_trials.reshape(-1, 1)
+    NN_Net, history_pred = train_PredictionModel(param_values, EEG_Data, activity)
     
     # format classification data
-    predicted_source_activity = Net(EEG_Data).reshape((-1, 1, time_steps))
+    predicted_source_activity = NN_Net.predict(EEG_Data).reshape((-1, time_steps, 1))
     
-    CNN_Net, train_performance_clas, Validator_clas, STOP_clas = trainClassificationModel(param_values, predicted_source_activity, source_trials)
-    
-    
-    EEG_Data, activity, source_trials, _  = Balanced_EEG(param_values, brain_area, seed = 1)
+    CNN_Net, history_clas = trainClassificationModel(param_values, predicted_source_activity, source_trials)
     
     
-    EEG_Data = setNNFormat(EEG_Data, electrodes)
-    predicted_source_activity = Net(EEG_Data)
-    predicted_class = CNN_Net(predicted_source_activity.reshape(-1, 1, time_steps)).detach().numpy().reshape(-1)
+    EEG_Data, activity, source_trials, noisy_trials  = simulateData(param_values,'train', train_dipole = brain_area, seed = 1)
     
     
-    predicted_source_activity = predicted_source_activity.detach().numpy().reshape(-1, time_steps)
-    activity = activity.transpose()
-    mse_pred = ((activity - predicted_source_activity)**2).mean()
-    mse_clas = ((source_trials - predicted_class)**2).mean()
+    predicted_source_activity = NN_Net.predict(EEG_Data.transpose().reshape(-1, electrodes))
+    predicted_class = CNN_Net.predict(predicted_source_activity.reshape(-1, time_steps, 1))
+    
+    
+    mse_pred = np.mean(history_pred.history['val_mse'])
+    mse_clas = np.mean(history_clas.history['val_mse'])
 
-    truepositive_clas = (predicted_class[source_trials == 1] >= 0.5).mean()
-    truenegative_clas = (predicted_class[source_trials == 0] < 0.5).mean()
-
+    true_active_clas = (predicted_class[source_trials == 1] >= 0.5).mean()
+    true_noisy_clas = (predicted_class[noisy_trials == 1] < 0.5).mean()
+    true_idle_clas = (predicted_class[(source_trials == 0) & (noisy_trials == 0)] < 0.5).mean()
+    accuracy = (true_active_clas + true_noisy_clas + true_idle_clas) / 3
     if plot:
         activity = activity.reshape((-1))
         predicted_source_activity = predicted_source_activity.reshape((-1))
         plot_line([activity, predicted_source_activity],['Original','Predicted'], title = 'Prediction_Performance')
-        source_trials = np.repeat(source_trials, time_steps).reshape((-1))
+        source_trials = np.repeat(source_trials, time_steps).reshape((-1)) * 1
         predicted_class = np.repeat(predicted_class, time_steps).reshape((-1))
         plot_line([predicted_source_activity, source_trials, predicted_class],['Predicted Activity', 'Original State', 'Predicted State'], dash = ['solid', 'dash', 'dot'],title = 'Classification Performance')
-        plot_line([np.array(Validator.val_losses)], ['Prediction Validation Loss'], title = 'Prediction Validation Loss')
-        plot_line([np.array(Validator_clas.val_losses)], ['Classification Validation Loss'], title = 'Classification Validation Loss')
-    return (mse_pred, mse_clas, truepositive_clas, truenegative_clas, STOP, STOP_clas)
+        plot_line([np.array(history_pred.history['val_mse']), np.array(history_pred.history['mse'])],
+                            ['Prediction Validation Loss','Prediction Training Loss'],
+                            title = 'Prediction Loss')
+        plot_line([np.array(history_clas.history['val_mse']), np.array(history_clas.history['mse'])],
+                    ['Classification Validation Loss','Classification Training Loss'],
+                    title = 'Classification Loss')    
+    if add_networks:
+        data = (mse_pred, mse_clas, true_active_clas, true_noisy_clas, true_idle_clas, accuracy, NN_Net, CNN_Net)
+    else: 
+        data = (mse_pred, mse_clas, true_active_clas, true_noisy_clas, true_idle_clas, accuracy)
+    return data
     
     
     
